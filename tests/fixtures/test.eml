@@ -1,0 +1,28 @@
+From: security-alert@paypa1-support.com
+To: john.doe@example.com
+Subject: Urgent: Your account has been limited - Verify now
+Date: Mon, 28 Apr 2025 08:42:11 +0000
+Message-ID: <20250428084211.x7k92@paypa1-support.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+
+Dear PayPal Customer,
+
+We have detected unusual activity on your account. Your account access has been
+temporarily limited until you verify your information.
+
+To restore full access, please confirm your details within 24 hours:
+
+http://paypa1-support.com/verify?token=xK92mP
+
+You will need to provide:
+- Full name
+- Credit card number
+- Social Security Number
+- Account password
+
+Failure to verify within 24 hours will result in permanent account suspension.
+
+PayPal Security Team
+paypa1-support.com

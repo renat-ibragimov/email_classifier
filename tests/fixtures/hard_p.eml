@@ -1,0 +1,28 @@
+From: it-support@corp-services.example.com
+To: employees@example.com
+Subject: Scheduled maintenance: Password policy update effective May 5
+Date: Sun, 04 May 2025 08:00:00 +0000
+Message-ID: <20250504080000.maint@corp-services.example.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+
+Hi team,
+
+As part of our ongoing security improvements, we're updating our password
+policy in line with NIST SP 800-63B guidelines. Starting May 5, all accounts
+will require passwords of at least 16 characters.
+
+To ensure uninterrupted access, please update your password before the
+deadline using our self-service portal:
+
+https://corp-services.example.com/password-reset?ref=maintenance-2025Q2
+
+If you've already updated your password in the last 30 days, no action
+is needed.
+
+For questions, contact the help desk at ext. 4421 or reply to this email.
+
+Thanks,
+David Park
+IT Infrastructure Team

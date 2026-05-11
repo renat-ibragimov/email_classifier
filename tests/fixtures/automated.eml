@@ -1,0 +1,33 @@
+From: gitlab@devops.example.com
+To: dev-team@example.com
+Subject: [GitLab] Pipeline #48291 failed for branch feature/user-auth
+Date: Sat, 03 May 2025 03:15:00 +0000
+Message-ID: <20250503031500.pipeline@devops.example.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+X-Auto-Response-Suppress: All
+Auto-Submitted: auto-generated
+
+Project: backend-api
+Branch: feature/user-auth
+Commit: a1b2c3d4 - "Add JWT refresh token rotation"
+Author: Alex Chen
+
+Pipeline #48291 FAILED
+
+Stage: test
+Job: unit-tests (#129847)
+Duration: 3 minutes 42 seconds
+
+Failed tests:
+  - test_refresh_token_rotation (auth/tests/test_tokens.py:45)
+    AssertionError: Expected status 200, got 401
+  - test_expired_token_rejection (auth/tests/test_tokens.py:89)
+    TimeoutError: Token validation exceeded 5s limit
+
+View pipeline: https://gitlab.devops.example.com/backend-api/pipelines/48291
+View job log: https://gitlab.devops.example.com/backend-api/jobs/129847
+
+--
+GitLab CI/CD Notification
