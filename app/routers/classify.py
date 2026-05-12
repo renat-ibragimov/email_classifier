@@ -17,6 +17,12 @@ MAX_SIZE = 10 * 1024 * 1024
 router = APIRouter(prefix="/classify", tags=["classify"])
 
 
+async def get_repo(
+    session: AsyncSession = Depends(get_session),
+) -> ClassificationRepository:
+    return ClassificationRepository(session)
+
+
 @router.post(
     "/",
     response_model=ClassificationResponse,
@@ -24,7 +30,7 @@ router = APIRouter(prefix="/classify", tags=["classify"])
 )
 async def post_classify(
     file: UploadFile,
-    session: AsyncSession = Depends(get_session),
+    repo: ClassificationRepository = Depends(get_repo),
 ):
     """Accept an .eml file, classify it using LLM, and store the result.
 
@@ -45,15 +51,14 @@ async def post_classify(
             detail="File too large, maximum size is 10 MB",
         )
 
-    repo = ClassificationRepository(session)
     service = ClassificationService(repo)
 
     try:
         record, is_new = await service.classify(content)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
-    except Exception as e:
-        logger.exception(f"Classification failed: {e}")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+    except Exception:
+        logger.exception("Classification failed")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Classification failed",
@@ -72,14 +77,13 @@ async def post_classify(
 )
 async def get_classify(
     record_id: uuid.UUID,
-    session: AsyncSession = Depends(get_session),
+    repo: ClassificationRepository = Depends(get_repo),
 ):
     """Retrieve a classification record by its ID.
 
     - **200 OK**: record found.
     - **404 Not Found**: no record with this ID.
     """
-    repo = ClassificationRepository(session)
     record = await repo.find_by_id(record_id)
 
     if not record:

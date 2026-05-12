@@ -43,11 +43,9 @@ def _extract_body(msg: email.message.EmailMessage) -> str:
     Returns:
         Plain text body content, or empty string if none found.
     """
-    # Single-part: return content directly if it is text
     if not msg.is_multipart():
         return msg.get_content() if msg.get_content_type() in ("text/plain", "text/html") else ""
 
-    # Multipart: collect all text and HTML parts
     text_parts = []
     html_parts = []
     for part in msg.walk():

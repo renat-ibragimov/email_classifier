@@ -131,11 +131,9 @@ async def classify_email(parsed_email: ParsedEmail) -> ClassificationResult:
     """
     user_message = _build_user_message(parsed_email)
 
-    # First classification pass
     result = await _call_openai(user_message, SYSTEM_PROMPT)
     reviewed = False
 
-    # Second pass with stricter prompt if confidence is below threshold
     if result.get("confidence", 0) <= settings.confidence_threshold:
         result = await _call_openai(user_message, REVIEW_PROMPT)
         reviewed = True
