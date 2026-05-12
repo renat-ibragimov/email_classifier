@@ -31,18 +31,26 @@ RepoDep = Annotated[ClassificationRepository, Depends(get_repo)]
 @router.post(
     "/",
     response_model=ClassificationResponse,
+    status_code=status.HTTP_201_CREATED,
     summary="Classify an .eml file",
+    responses={
+        status.HTTP_200_OK: {
+            "model": ClassificationResponse,
+            "description": "Duplicate of an already-classified file; returns the cached record.",
+        },
+        status.HTTP_422_UNPROCESSABLE_CONTENT: {
+            "description": "Invalid `.eml`: wrong extension, file > 10 MB, or missing `From` header.",
+        },
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {
+            "description": "Classification failed; the record is persisted with `status=failed` and can be retried.",
+        },
+    },
 )
 async def post_classify(
     file: UploadFile,
     repo: RepoDep,
 ) -> JSONResponse:
-    """Accept an .eml file, classify it using LLM, and store the result.
-
-    - **201 Created**: new file, classification performed.
-    - **200 OK**: duplicate file, returns existing record.
-    - **422 Unprocessable Entity**: file is not a valid .eml.
-    """
+    """Accept an .eml file, classify it using LLM, and store the result."""
     if not file.filename or not file.filename.endswith(".eml"):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -79,16 +87,15 @@ async def post_classify(
     "/{record_id}/",
     response_model=ClassificationResponse,
     summary="Get classification by ID",
+    responses={
+        status.HTTP_404_NOT_FOUND: {"description": "No record with this ID."},
+    },
 )
 async def get_classify(
     record_id: uuid.UUID,
     repo: RepoDep,
 ) -> ClassificationResponse:
-    """Retrieve a classification record by its ID.
-
-    - **200 OK**: record found.
-    - **404 Not Found**: no record with this ID.
-    """
+    """Retrieve a classification record by its ID."""
     record = await repo.find_by_id(record_id)
 
     if not record:
