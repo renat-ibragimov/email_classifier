@@ -1,7 +1,7 @@
 APP_NAME = app
 APP_NAME_TEST = test_app
 
-.PHONY: clean help build run stop clean-pyc clean-build ruff_check ruff_fix test coverage
+.PHONY: clean help build run stop clean-pyc clean-build ruff_check ruff_fix test cov
 
 help:
 	@echo "==================== Usage ===================="
@@ -14,7 +14,7 @@ help:
 	@echo "ruff_check         : Run ruff lint check"
 	@echo "ruff_fix           : Run ruff lint with auto-fix"
 	@echo "test               : Ruff check + run tests. Use make test k=<name> for specific test"
-	@echo "coverage           : Ruff check + tests with coverage report"
+	@echo "cov                : Ruff check + tests with coverage report (fresh build)"
 
 ### BUILD AND RUN
 build:
@@ -55,7 +55,7 @@ test:
 	-@docker compose -f docker-compose-test.yml run --rm $(APP_NAME_TEST) ruff check .
 	@docker compose -f docker-compose-test.yml run --rm $(APP_NAME_TEST) pytest tests -s -vv -k "${k}"
 
-cov:
-	@docker compose -f docker-compose-test.yml build $(APP_NAME_TEST)
+cov: clean-build
+	@docker compose -f docker-compose-test.yml build --no-cache $(APP_NAME_TEST)
 	-@docker compose -f docker-compose-test.yml run --rm $(APP_NAME_TEST) ruff check .
 	@docker compose -f docker-compose-test.yml run --rm $(APP_NAME_TEST) pytest --cov=app --cov-report=term-missing tests/

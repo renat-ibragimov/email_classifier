@@ -45,14 +45,14 @@ async def post_classify(
     """
     if not file.filename or not file.filename.endswith(".eml"):
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="File must be a valid .eml file",
         )
 
     content = await file.read(MAX_SIZE + 1)
     if len(content) > MAX_SIZE:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="File too large, maximum size is 10 MB",
         )
 
@@ -61,7 +61,7 @@ async def post_classify(
     try:
         record, is_new = await service.classify(content)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e)) from e
     except Exception as e:
         logger.exception("Classification failed")
         raise HTTPException(

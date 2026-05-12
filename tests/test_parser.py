@@ -35,6 +35,33 @@ HTML_EML = (
     b"<html><body><p>Hello</p></body></html>\r\n"
 )
 
+MULTIPART_EML = (
+    b"From: sender@example.com\r\n"
+    b"To: recipient@example.com\r\n"
+    b"Subject: Multipart email\r\n"
+    b'Content-Type: multipart/alternative; boundary="BOUNDARY"\r\n'
+    b"\r\n"
+    b"--BOUNDARY\r\n"
+    b'Content-Type: text/plain; charset="utf-8"\r\n'
+    b"\r\n"
+    b"Plain text body.\r\n"
+    b"--BOUNDARY\r\n"
+    b'Content-Type: text/html; charset="utf-8"\r\n'
+    b"\r\n"
+    b"<html><body><p>HTML body</p></body></html>\r\n"
+    b"--BOUNDARY--\r\n"
+)
+
+NON_TEXT_EML = (
+    b"From: sender@example.com\r\n"
+    b"To: recipient@example.com\r\n"
+    b"Subject: Binary attachment\r\n"
+    b"Content-Type: application/octet-stream\r\n"
+    b"Content-Transfer-Encoding: base64\r\n"
+    b"\r\n"
+    b"aGVsbG8K\r\n"
+)
+
 
 class TestParseEmail:
 
@@ -71,3 +98,16 @@ class TestParseEmail:
         result = parse_email(VALID_EML)
         with pytest.raises(AttributeError):
             result.sender = "other@example.com"
+
+    def test_multipart_combines_plain_and_html(self):
+        result = parse_email(MULTIPART_EML)
+        assert "Plain text body" in result.body
+        assert "<html>" in result.body or "HTML body" in result.body
+        plain_idx = result.body.find("Plain text body")
+        html_idx = result.body.find("HTML body")
+        assert plain_idx < html_idx
+
+    def test_non_text_content_returns_empty_body(self):
+        result = parse_email(NON_TEXT_EML)
+        assert result.sender == "sender@example.com"
+        assert result.body == ""
