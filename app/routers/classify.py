@@ -1,5 +1,6 @@
 import logging
 import uuid
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 from fastapi.responses import JSONResponse
@@ -17,10 +18,14 @@ MAX_SIZE = 10 * 1024 * 1024
 router = APIRouter(prefix="/classify", tags=["classify"])
 
 
-async def get_repo(
-    session: AsyncSession = Depends(get_session),
+def get_repo(
+    session: Annotated[AsyncSession, Depends(get_session)],
 ) -> ClassificationRepository:
+    """Build a ClassificationRepository bound to the current request's session."""
     return ClassificationRepository(session)
+
+
+RepoDep = Annotated[ClassificationRepository, Depends(get_repo)]
 
 
 @router.post(
@@ -30,8 +35,8 @@ async def get_repo(
 )
 async def post_classify(
     file: UploadFile,
-    repo: ClassificationRepository = Depends(get_repo),
-):
+    repo: RepoDep,
+) -> JSONResponse:
     """Accept an .eml file, classify it using LLM, and store the result.
 
     - **201 Created**: new file, classification performed.
@@ -57,12 +62,12 @@ async def post_classify(
         record, is_new = await service.classify(content)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
-    except Exception:
+    except Exception as e:
         logger.exception("Classification failed")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Classification failed",
-        )
+        ) from e
 
     response = ClassificationResponse.model_validate(record)
     status_code = status.HTTP_201_CREATED if is_new else status.HTTP_200_OK
@@ -77,8 +82,8 @@ async def post_classify(
 )
 async def get_classify(
     record_id: uuid.UUID,
-    repo: ClassificationRepository = Depends(get_repo),
-):
+    repo: RepoDep,
+) -> ClassificationResponse:
     """Retrieve a classification record by its ID.
 
     - **200 OK**: record found.

@@ -36,7 +36,7 @@ clean-build:
 	rm -rf build/ dist/ *.egg-info
 
 clean: clean-build clean-pyc
-	rm -rf .mypy_cache/ .pytest_cache/ .ruff_cache/ .coverage htmlcov/
+	-rm -rf .mypy_cache/ .pytest_cache/ .ruff_cache/ .coverage htmlcov/
 	@docker compose down --remove-orphans
 	@docker compose -f docker-compose-test.yml down --remove-orphans
 
@@ -47,7 +47,7 @@ ruff_check:
 
 ruff_fix:
 	@docker compose -f docker-compose-test.yml build $(APP_NAME_TEST)
-	@docker compose -f docker-compose-test.yml run --rm $(APP_NAME_TEST) ruff check --fix .
+	@docker compose -f docker-compose-test.yml run --rm -v $(CURDIR):/email_classifier --user $(shell id -u):$(shell id -g) $(APP_NAME_TEST) ruff check --fix .
 
 ### TESTING
 test:

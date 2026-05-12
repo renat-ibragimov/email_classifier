@@ -9,6 +9,8 @@ from app.helpers.enums import ClassificationStatusEnum, EmailCategoryEnum
 
 
 class ClassificationRecord(Base):
+    """Persisted classification result for a single uploaded .eml file."""
+
     __tablename__ = "classification_record"
 
     id: Mapped[uuid.UUID] = mapped_column(

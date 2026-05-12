@@ -9,5 +9,6 @@ def compute_hash(content: bytes) -> str:
 
     Returns:
         64-character hex digest string.
+
     """
     return hashlib.sha256(content).hexdigest()

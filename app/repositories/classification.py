@@ -10,7 +10,7 @@ from app.models.classification import ClassificationRecord
 class ClassificationRepository:
     """Data access for ClassificationRecord rows."""
 
-    def __init__(self, session: AsyncSession):
+    def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
     async def find_by_id(self, record_id: uuid.UUID) -> ClassificationRecord | None:
@@ -21,6 +21,7 @@ class ClassificationRepository:
 
         Returns:
             ClassificationRecord or None if not found.
+
         """
         result = await self.session.execute(
             select(ClassificationRecord).where(ClassificationRecord.id == record_id)
@@ -35,6 +36,7 @@ class ClassificationRepository:
 
         Returns:
             ClassificationRecord or None if not found.
+
         """
         result = await self.session.execute(
             select(ClassificationRecord).where(ClassificationRecord.content_hash == content_hash)
@@ -58,6 +60,7 @@ class ClassificationRepository:
             RuntimeError: If the winning row disappeared between rollback and
                 the re-fetch. This is an unexpected state — the row should
                 still be there.
+
         """
         record = ClassificationRecord(content_hash=content_hash)
         self.session.add(record)
@@ -73,7 +76,7 @@ class ClassificationRepository:
             if existing is None:
                 raise RuntimeError(
                     "Concurrent record disappeared after IntegrityError — unexpected state"
-                )
+                ) from None
             return existing, False
 
         return record, True

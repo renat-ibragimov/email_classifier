@@ -15,6 +15,7 @@ def parse_email(content: bytes) -> ParsedEmail:
 
     Raises:
         ValueError: If the email is missing the From header.
+
     """
     msg = email.message_from_bytes(content, policy=default)
 
@@ -42,9 +43,10 @@ def _extract_body(msg: email.message.EmailMessage) -> str:
 
     Returns:
         Plain text body content, or empty string if none found.
+
     """
     if not msg.is_multipart():
-        return msg.get_content() if msg.get_content_type() in ("text/plain", "text/html") else ""
+        return msg.get_content() if msg.get_content_type() in {"text/plain", "text/html"} else ""
 
     text_parts = []
     html_parts = []

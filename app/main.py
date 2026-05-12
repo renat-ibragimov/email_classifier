@@ -9,8 +9,3 @@ app = FastAPI(
 )
 
 app.include_router(classify_router)
-
-
-@app.get("/health")
-async def health():
-    return {"status": "ok"}

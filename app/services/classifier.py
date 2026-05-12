@@ -73,6 +73,7 @@ def _build_user_message(email: ParsedEmail) -> str:
 
     Returns:
         Formatted string with email headers and body.
+
     """
     return (
         f"From: {email.sender}\n"
@@ -95,6 +96,7 @@ async def _call_openai(user_message: str, system_prompt: str) -> dict:
 
     Raises:
         RuntimeError: If the model does not return a tool call.
+
     """
     client = AsyncOpenAI(api_key=settings.openai_api_key)
 
@@ -128,6 +130,7 @@ async def classify_email(parsed_email: ParsedEmail) -> ClassificationResult:
 
     Returns:
         ClassificationResult with category, confidence, reasoning, signals, reviewed.
+
     """
     user_message = _build_user_message(parsed_email)
 

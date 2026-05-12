@@ -10,7 +10,7 @@ from app.services.parser import parse_email
 class ClassificationService:
     """Orchestrates email classification: dedup, parse, classify, persist."""
 
-    def __init__(self, repo: ClassificationRepository):
+    def __init__(self, repo: ClassificationRepository) -> None:
         self.repo = repo
 
     async def classify(self, content: bytes) -> tuple[ClassificationRecord, bool]:
@@ -28,6 +28,7 @@ class ClassificationService:
 
         Raises:
             ValueError: If content is not a valid .eml (no DB write happened).
+
         """
         content_hash = compute_hash(content)
         parsed = parse_email(content)
@@ -60,6 +61,7 @@ class ClassificationService:
 
         Returns:
             Updated ClassificationRecord.
+
         """
         try:
             result = await classify_email(parsed)
