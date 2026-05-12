@@ -1,0 +1,7 @@
+To: someone@example.com
+Subject: Missing sender
+Date: Mon, 12 May 2025 10:00:00 +0000
+MIME-Version: 1.0
+Content-Type: text/plain; charset="utf-8"
+
+This email has no From header.

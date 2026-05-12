@@ -1,9 +1,7 @@
-from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession
-
+from app.helpers.dto import ParsedEmail
 from app.helpers.enums import ClassificationStatusEnum
 from app.models.classification import ClassificationRecord
+from app.repositories.classification import ClassificationRepository
 from app.services.classifier import classify_email
 from app.services.hasher import compute_hash
 from app.services.parser import parse_email
@@ -12,73 +10,57 @@ from app.services.parser import parse_email
 class ClassificationService:
     """Orchestrates email classification: dedup, parse, classify, persist."""
 
-    def __init__(self, session: AsyncSession):
-        self.session = session
-
-    async def get_by_id(self, record_id) -> ClassificationRecord | None:
-        """Fetch a classification record by ID.
-
-        Args:
-            record_id: UUID of the record.
-
-        Returns:
-            ClassificationRecord or None if not found.
-        """
-        result = await self.session.execute(
-            select(ClassificationRecord).where(ClassificationRecord.id == record_id)
-        )
-        return result.scalar_one_or_none()
+    def __init__(self, repo: ClassificationRepository):
+        self.repo = repo
 
     async def classify(self, content: bytes) -> tuple[ClassificationRecord, bool]:
         """Classify email content. Returns existing record if duplicate.
 
-        Handles concurrent duplicates via unique constraint on content_hash.
-        Re-classifies records stuck in pending or failed state.
+        Parsing happens before any DB interaction so an invalid .eml never
+        leaves a PENDING orphan behind. The PENDING row is committed before
+        the LLM call so the unique-index lock isn't held while OpenAI runs.
 
         Args:
             content: Raw .eml file bytes.
 
         Returns:
             Tuple of (record, is_new). is_new=False means duplicate.
+
+        Raises:
+            ValueError: If content is not a valid .eml (no DB write happened).
         """
         content_hash = compute_hash(content)
+        parsed = parse_email(content)
 
-        # Check for existing classification
-        existing = await self._find_by_hash(content_hash)
+        existing = await self.repo.find_by_hash(content_hash)
         if existing:
             if existing.status == ClassificationStatusEnum.CLASSIFIED:
                 return existing, False
-            # Re-classify pending or failed records
-            return await self._do_classify(existing, content), False
+            # Re-classify pending or failed records (no commit needed; SELECT-only tx).
+            return await self._run_llm_classification(existing, parsed), False
 
-        # New record
-        record = ClassificationRecord(content_hash=content_hash)
-        self.session.add(record)
+        # Insert + commit PENDING immediately to release the unique-index lock
+        # before the multi-second LLM call. Repo handles the concurrent-insert race.
+        record, is_new = await self.repo.create(content_hash)
+        await self.repo.save()
 
-        try:
-            await self.session.flush()
-        except IntegrityError:
-            # Concurrent request already created this record
-            await self.session.rollback()
-            existing = await self._find_by_hash(content_hash)
-            if existing and existing.status == ClassificationStatusEnum.CLASSIFIED:
-                return existing, False
-            return await self._do_classify(existing, content), False
+        if not is_new and record.status == ClassificationStatusEnum.CLASSIFIED:
+            return record, False
 
-        return await self._do_classify(record, content), True
+        return await self._run_llm_classification(record, parsed), is_new
 
-    async def _do_classify(self, record: ClassificationRecord, content: bytes) -> ClassificationRecord:
-        """Run LLM classification and update the record.
+    async def _run_llm_classification(
+        self, record: ClassificationRecord, parsed: ParsedEmail
+    ) -> ClassificationRecord:
+        """Call the LLM classifier and persist the result.
 
         Args:
             record: Existing DB record to update.
-            content: Raw .eml file bytes for parsing.
+            parsed: Already-parsed email content.
 
         Returns:
             Updated ClassificationRecord.
         """
-        parsed = parse_email(content)
-
         try:
             result = await classify_email(parsed)
             record.status = ClassificationStatusEnum.CLASSIFIED
@@ -89,24 +71,8 @@ class ClassificationService:
             record.reviewed = result.reviewed
         except Exception:
             record.status = ClassificationStatusEnum.FAILED
-            await self.session.commit()
+            await self.repo.save()
             raise
 
-        await self.session.commit()
-        await self.session.refresh(record)
-
+        await self.repo.save()
         return record
-
-    async def _find_by_hash(self, content_hash: str) -> ClassificationRecord | None:
-        """Find existing record by content hash.
-
-        Args:
-            content_hash: SHA-256 hex digest.
-
-        Returns:
-            ClassificationRecord or None.
-        """
-        result = await self.session.execute(
-            select(ClassificationRecord).where(ClassificationRecord.content_hash == content_hash)
-        )
-        return result.scalar_one_or_none()

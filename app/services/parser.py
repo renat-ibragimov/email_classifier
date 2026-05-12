@@ -14,20 +14,17 @@ def parse_email(content: bytes) -> ParsedEmail:
         ParsedEmail with extracted header fields and body text.
 
     Raises:
-        ValueError: If content cannot be parsed as a valid email.
+        ValueError: If the email is missing the From header.
     """
     msg = email.message_from_bytes(content, policy=default)
 
     sender = msg.get("From", "")
-    recipient = msg.get("To", "")
-
-    # Validity check: both sender and recipient are missing
-    if not sender and not recipient:
-        raise ValueError("File is not a valid .eml: missing required headers")
+    if not sender:
+        raise ValueError("File is not a valid .eml: missing From header")
 
     return ParsedEmail(
         sender=sender,
-        to=recipient,
+        to=msg.get("To", ""),
         subject=msg.get("Subject", ""),
         date=msg.get("Date", ""),
         body=_extract_body(msg),

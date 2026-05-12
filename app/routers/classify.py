@@ -1,3 +1,4 @@
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
@@ -5,8 +6,13 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_session
+from app.repositories.classification import ClassificationRepository
 from app.schemas.classification import ClassificationResponse
 from app.services.classification_service import ClassificationService
+
+logger = logging.getLogger(__name__)
+
+MAX_SIZE = 10 * 1024 * 1024
 
 router = APIRouter(prefix="/classify", tags=["classify"])
 
@@ -32,14 +38,22 @@ async def post_classify(
             detail="File must be a valid .eml file",
         )
 
-    content = await file.read()
-    service = ClassificationService(session)
+    content = await file.read(MAX_SIZE + 1)
+    if len(content) > MAX_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="File too large, maximum size is 10 MB",
+        )
+
+    repo = ClassificationRepository(session)
+    service = ClassificationService(repo)
 
     try:
         record, is_new = await service.classify(content)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
-    except Exception:
+    except Exception as e:
+        logger.exception(f"Classification failed: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Classification failed",
@@ -65,8 +79,8 @@ async def get_classify(
     - **200 OK**: record found.
     - **404 Not Found**: no record with this ID.
     """
-    service = ClassificationService(session)
-    record = await service.get_by_id(record_id)
+    repo = ClassificationRepository(session)
+    record = await repo.find_by_id(record_id)
 
     if not record:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Record not found")
