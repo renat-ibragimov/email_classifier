@@ -16,9 +16,11 @@ dependencies = [
 
 [project.optional-dependencies]
 test = [
+    "httpx>=0.27.0",
     "pytest>=8.3.0",
     "pytest-asyncio>=0.24.0",
-    "httpx>=0.27.0",
+    "pytest-cov>=6.0.0",
+    "ruff>=0.11.0",
 ]
 
 [build-system]
@@ -27,3 +29,33 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 include = ["app*"]
+
+[tool.ruff]
+line-length = 120
+exclude = ["alembic/*"]
+preview = true
+
+[tool.ruff.lint]
+select = [
+    "F", "E", "W", "I", "N", "D", "UP", "ANN", "ASYNC", "S", "BLE",
+    "B", "A", "COM", "C4", "EM", "ISC", "ICN", "LOG", "G", "PIE",
+    "T20", "PT", "Q", "RSE", "RET", "SLF", "SLOT", "SIM", "TCH",
+    "INT", "ARG", "TD", "PL", "FLY", "FAST", "PERF", "FURB", "RUF",
+]
+ignore = [
+    "D100", "D104", "D203", "D212", "COM812", "G004",
+    "ANN101", "ANN102", "ISC001", "TD003", "PLR0913",
+    "FAST001", "RUF001", "RUF012",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S", "ANN", "ARG", "TD", "PL", "RUF", "D"]
+
+[tool.ruff.format]
+docstring-code-format = true
+indent-style = "space"
+quote-style = "double"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
