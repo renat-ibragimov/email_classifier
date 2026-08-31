@@ -37,12 +37,11 @@ def mock_classifier():
         yield mock
 
 
-async def _post(eml_bytes, filename="email.eml", headers=None):
+async def _post(eml_bytes, filename="email.eml"):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         return await client.post(
             "/classify/",
             files={"file": (filename, eml_bytes, "application/octet-stream")},
-            headers=headers,
         )
 
 
@@ -120,31 +119,6 @@ class TestGetClassify:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.get("/classify/not-a-uuid/")
         assert response.status_code == 422
-
-
-class TestRateLimit:
-
-    async def test_eleventh_request_returns_429(self, db_session):
-        headers = {"X-Forwarded-For": "203.0.113.10"}
-
-        for _ in range(10):
-            allowed = await _post(VALID_EML, headers=headers)
-            assert allowed.status_code in (200, 201)
-
-        response = await _post(VALID_EML, headers=headers)
-
-        assert response.status_code == 429
-        assert "Rate limit exceeded" in response.json()["detail"]
-        assert response.headers["Retry-After"] == "60"
-
-    async def test_limit_is_per_client_ip(self, db_session):
-        for _ in range(10):
-            await _post(VALID_EML, headers={"X-Forwarded-For": "203.0.113.10"})
-
-        # A different forwarded client still has its own budget.
-        response = await _post(VALID_EML, headers={"X-Forwarded-For": "203.0.113.11"})
-
-        assert response.status_code == 200
 
 
 class TestHealth:

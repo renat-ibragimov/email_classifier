@@ -188,4 +188,4 @@ Tests run in a dedicated Docker Compose stack (`docker-compose-test.yml`) with a
 make cov
 ```
 
-Current coverage: **100%** across 24 modules (268 statements).
+Current coverage: **100%** across 24 modules (268 statements), 58 tests.
