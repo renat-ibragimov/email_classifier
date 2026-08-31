@@ -1,4 +1,5 @@
 import json
+from functools import lru_cache
 
 from openai import AsyncOpenAI
 from openai.types.chat import (
@@ -65,6 +66,20 @@ REVIEW_PROMPT = (
 )
 
 
+@lru_cache(maxsize=1)
+def get_client() -> AsyncOpenAI:
+    """Return the shared OpenAI client, creating it on first use.
+
+    The client owns an HTTP connection pool, so it is built once and reused
+    across requests instead of being re-created on every classification call.
+
+    Returns:
+        Cached AsyncOpenAI client.
+
+    """
+    return AsyncOpenAI(api_key=settings.openai_api_key)
+
+
 def _build_user_message(email: ParsedEmail) -> str:
     """Build user message from parsed email data.
 
@@ -98,9 +113,7 @@ async def _call_openai(user_message: str, system_prompt: str) -> dict:
         RuntimeError: If the model does not return a tool call.
 
     """
-    client = AsyncOpenAI(api_key=settings.openai_api_key)
-
-    response = await client.chat.completions.create(
+    response = await get_client().chat.completions.create(
         model=settings.openai_model,
         messages=[
             ChatCompletionSystemMessageParam(role="system", content=system_prompt),

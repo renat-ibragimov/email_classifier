@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 import app.database.session as session_module
 from app.config import settings
 from app.models.classification import ClassificationRecord  # noqa: F401  (register model)
+from app.rate_limit import limiter
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -34,3 +35,11 @@ async def db_session():
         await session.commit()
         yield session
     await engine.dispose()
+
+
+@pytest.fixture(autouse=True)
+def reset_rate_limiter():
+    """Clear the in-memory rate-limit counters so tests don't leak limits into each other."""
+    limiter.reset()
+    yield
+    limiter.reset()

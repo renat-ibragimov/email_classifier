@@ -8,6 +8,8 @@ Each email is assigned one of six categories (**spam**, **phishing**, **newslett
 
 - `POST /classify/` - upload an `.eml` file and get a classification back
 - `GET /classify/{id}/` - fetch a previously classified record by ID
+- `GET /health` - liveness probe, returns `{"status": "ok"}`
+- **Rate limiting** on `POST /classify/`: 10 requests per minute per client IP (in-memory, via `slowapi`), keyed off `X-Forwarded-For` so it works behind a reverse proxy
 - **Deduplication** by SHA-256 of raw `.eml` bytes; the same file uploaded twice returns the cached result with `200` instead of re-running the LLM
 - **Two-pass classification**: a stricter "senior analyst" review runs when first-pass confidence is below the threshold (`reviewed=true` in the response)
 - **OpenAI tool use** is forced via `tool_choice` so the model can only return a valid category from the enum
@@ -90,10 +92,38 @@ curl http://localhost:8000/classify/<record-id>/
 | `POST /classify/` | `201 Created` | New file, classification performed |
 | | `200 OK` | Duplicate of an already-classified file |
 | | `422 Unprocessable Content` | Wrong extension, file > 10 MB, or missing `From` header |
+| | `429 Too Many Requests` | More than 10 requests in a minute from the same client IP |
 | | `500 Internal Server Error` | LLM call failed; record is persisted with `status=failed` and can be retried by re-uploading |
 | `GET /classify/{id}/` | `200 OK` | Record found |
 | | `404 Not Found` | Unknown ID |
 | | `422 Unprocessable Content` | Invalid UUID |
+| `GET /health` | `200 OK` | Always, while the process is up |
+
+## Deployment
+
+The demo runs behind a [Caddy](https://caddyserver.com/) reverse proxy that terminates TLS. `docker-compose.prod.yml` is the dev stack minus published ports: neither Postgres nor the app is reachable from the host, and the app joins an external Docker network named `web` that Caddy is also attached to.
+
+Create that network once, if it does not exist yet:
+
+```bash
+docker network create web
+```
+
+Then, with `.env` present on the server:
+
+```bash
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+The app container is named `email-classifier`, so Caddy reaches it over the `web` network by that hostname:
+
+```caddyfile
+emails.renat-ibragimov.com {
+    reverse_proxy email-classifier:8000
+}
+```
+
+Caddy provisions the certificate automatically. Both services use `restart: unless-stopped`, so they come back after a reboot; migrations run on app startup as in dev.
 
 ## Architecture
 
@@ -101,7 +131,7 @@ Layered FastAPI service. Request flow: `routers/classify.py` → `Classification
 
 ```
 app/
-├── routers/         HTTP handlers (POST /classify/, GET /classify/{id}/)
+├── routers/         HTTP handlers (POST /classify/, GET /classify/{id}/, GET /health)
 ├── services/
 │   ├── classification_service.py   Orchestration: dedup, parse-then-classify-then-persist
 │   ├── classifier.py               OpenAI tool-use, two-pass review logic
@@ -113,6 +143,7 @@ app/
 ├── schemas/                        Pydantic response models
 ├── helpers/                        DTOs, enums (StrEnum with PG-compatible values)
 ├── database/                       Async engine + session factory
+├── rate_limit.py                   slowapi limiter, X-Forwarded-For key func, JSON 429 handler
 └── config.py                       pydantic-settings
 ```
 
@@ -149,12 +180,12 @@ make cov               # ruff (soft) + tests with coverage report; always rebuil
 
 Tests run in a dedicated Docker Compose stack (`docker-compose-test.yml`) with a separate `email_classifier_test` PostgreSQL database. Alembic migrations are applied once per session, and each test truncates the `classification_record` table.
 
-- **Unit-level**: `hasher`, `parser`, `classifier` (with mocked `AsyncOpenAI`), `classification_service` (with mocked repo + classifier), helper DTOs and enums.
+- **Unit-level**: `hasher`, `parser`, `classifier` (with the cached OpenAI client factory patched), `classification_service` (with mocked repo + classifier), rate-limit client-IP resolution, helper DTOs and enums.
 - **Repository integration**: real async sessions against `test_db`, covers `find_by_id`, `find_by_hash`, `create` (including the `IntegrityError` race and the defensive `RuntimeError` guard for the impossible "row disappeared" state), and `save`.
-- **Router integration**: ASGI in-process via `httpx.AsyncClient` + `ASGITransport`. Tests exercise the full DI chain (`get_session` → `get_repo` → service → repo) so the `AsyncSession` lifecycle is covered without overrides; only `classify_email` is patched to avoid real OpenAI calls.
+- **Router integration**: ASGI in-process via `httpx.AsyncClient` + `ASGITransport`. Tests exercise the full DI chain (`get_session` → `get_repo` → service → repo) so the `AsyncSession` lifecycle is covered without overrides; only `classify_email` is patched to avoid real OpenAI calls. Rate-limit counters are reset between tests by an autouse fixture, and a dedicated test drives `POST /classify/` past the limit to assert the `429`.
 
 ```bash
 make cov
 ```
 
-Current coverage: **100%** across 22 modules (239 statements).
+Current coverage: **100%** across 24 modules (268 statements).

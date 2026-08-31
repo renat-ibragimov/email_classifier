@@ -5,7 +5,7 @@ import pytest
 
 from app.helpers.dto import ParsedEmail
 from app.helpers.enums import EmailCategoryEnum
-from app.services.classifier import classify_email
+from app.services.classifier import classify_email, get_client
 
 PARSED = ParsedEmail(
     sender="sender@example.com",
@@ -31,8 +31,8 @@ def _mock_response(category, confidence, reasoning="r", signals=None):
 class TestClassifyEmail:
 
     async def test_high_confidence_no_review(self):
-        with patch("app.services.classifier.AsyncOpenAI") as mock_client_class:
-            mock_instance = mock_client_class.return_value
+        with patch("app.services.classifier.get_client") as mock_get_client:
+            mock_instance = mock_get_client.return_value
             mock_instance.chat.completions.create = AsyncMock(
                 return_value=_mock_response("spam", 0.95, "because tests", ["bad-link"])
             )
@@ -47,8 +47,8 @@ class TestClassifyEmail:
             assert mock_instance.chat.completions.create.call_count == 1
 
     async def test_low_confidence_triggers_review(self):
-        with patch("app.services.classifier.AsyncOpenAI") as mock_client_class:
-            mock_instance = mock_client_class.return_value
+        with patch("app.services.classifier.get_client") as mock_get_client:
+            mock_instance = mock_get_client.return_value
             mock_instance.chat.completions.create = AsyncMock(side_effect=[
                 _mock_response("newsletter", 0.5),
                 _mock_response("phishing", 0.92, "after review", ["red flag"]),
@@ -65,8 +65,8 @@ class TestClassifyEmail:
 
     async def test_confidence_at_threshold_triggers_review(self):
         # Default threshold is 0.85; <= triggers review.
-        with patch("app.services.classifier.AsyncOpenAI") as mock_client_class:
-            mock_instance = mock_client_class.return_value
+        with patch("app.services.classifier.get_client") as mock_get_client:
+            mock_instance = mock_get_client.return_value
             mock_instance.chat.completions.create = AsyncMock(side_effect=[
                 _mock_response("transactional", 0.85),
                 _mock_response("personal", 0.99),
@@ -78,10 +78,25 @@ class TestClassifyEmail:
             assert result.category == EmailCategoryEnum.PERSONAL
 
     async def test_no_tool_call_raises(self):
-        with patch("app.services.classifier.AsyncOpenAI") as mock_client_class:
-            mock_instance = mock_client_class.return_value
+        with patch("app.services.classifier.get_client") as mock_get_client:
+            mock_instance = mock_get_client.return_value
             mock_resp = MagicMock(choices=[MagicMock(message=MagicMock(tool_calls=None))])
             mock_instance.chat.completions.create = AsyncMock(return_value=mock_resp)
 
             with pytest.raises(RuntimeError, match="did not return a tool call"):
                 await classify_email(PARSED)
+
+
+class TestGetClient:
+
+    def test_client_is_created_once_and_reused(self):
+        get_client.cache_clear()
+        try:
+            with patch("app.services.classifier.AsyncOpenAI") as mock_client_class:
+                first = get_client()
+                second = get_client()
+
+            assert first is second
+            assert mock_client_class.call_count == 1
+        finally:
+            get_client.cache_clear()

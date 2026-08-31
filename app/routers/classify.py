@@ -2,11 +2,12 @@ import logging
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_session
+from app.rate_limit import CLASSIFY_RATE_LIMIT, limiter
 from app.repositories.classification import ClassificationRepository
 from app.schemas.classification import ClassificationResponse
 from app.services.classification_service import ClassificationService
@@ -41,12 +42,17 @@ RepoDep = Annotated[ClassificationRepository, Depends(get_repo)]
         status.HTTP_422_UNPROCESSABLE_CONTENT: {
             "description": "Invalid `.eml`: wrong extension, file > 10 MB, or missing `From` header.",
         },
+        status.HTTP_429_TOO_MANY_REQUESTS: {
+            "description": f"Rate limit exceeded (max {CLASSIFY_RATE_LIMIT} per client IP).",
+        },
         status.HTTP_500_INTERNAL_SERVER_ERROR: {
             "description": "Classification failed; the record is persisted with `status=failed` and can be retried.",
         },
     },
 )
+@limiter.limit(CLASSIFY_RATE_LIMIT)
 async def post_classify(
+    request: Request,  # ruff: ignore[unused-function-argument] (slowapi reads it)
     file: UploadFile,
     repo: RepoDep,
 ) -> JSONResponse:
