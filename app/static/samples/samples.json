@@ -1,0 +1,29 @@
+{
+  "samples": [
+    {
+      "filename": "personal.eml",
+      "label": "Personal",
+      "description": "Casual note between friends about dinner plans"
+    },
+    {
+      "filename": "newsletter.eml",
+      "label": "Newsletter",
+      "description": "Weekly tech digest with an unsubscribe footer"
+    },
+    {
+      "filename": "transactional.eml",
+      "label": "Transactional",
+      "description": "Order shipping confirmation with a tracking number"
+    },
+    {
+      "filename": "spam.eml",
+      "label": "Spam",
+      "description": "Gift card giveaway with urgency and a claim link"
+    },
+    {
+      "filename": "hard_p.eml",
+      "label": "Tricky phishing",
+      "description": "Tricky phishing: internal-looking password reset"
+    }
+  ]
+}

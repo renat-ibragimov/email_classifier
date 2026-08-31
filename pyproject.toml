@@ -31,6 +31,9 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 include = ["app*"]
 
+[tool.setuptools.package-data]
+app = ["static/*.html", "static/samples/*"]
+
 [tool.ruff]
 line-length = 120
 exclude = ["alembic/*"]

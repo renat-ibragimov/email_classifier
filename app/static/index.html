@@ -1,0 +1,985 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Email Classifier</title>
+<meta name="description" content="Upload an .eml file and see how an LLM classifies it: category, confidence, reasoning and signals.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f1115;
+    --surface: #161920;
+    --surface-2: #1b1f28;
+    --border: rgba(255, 255, 255, 0.08);
+    --border-strong: rgba(255, 255, 255, 0.16);
+    --text: #e6e8ec;
+    --text-dim: #9aa0ab;
+    --text-faint: #6b7280;
+    --accent: #f5a623;
+    --accent-dim: rgba(245, 166, 35, 0.12);
+
+    --cat-phishing: #e5484d;
+    --cat-spam: #f08c2e;
+    --cat-newsletter: #4a90d9;
+    --cat-transactional: #2fb8a8;
+    --cat-personal: #47b881;
+    --cat-automated: #8b909a;
+
+    --space: 8px;
+    --radius: 8px;
+    --radius-sm: 6px;
+    --t: 120ms ease;
+
+    --font: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  html { -webkit-text-size-adjust: 100%; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 15px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 64px 24px 48px;
+  }
+
+  /* ---------- header ---------- */
+
+  header { margin-bottom: 40px; }
+
+  h1 {
+    margin: 0 0 8px;
+    font-size: 28px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+
+  .subtitle {
+    margin: 0;
+    color: var(--text-dim);
+    font-size: 15px;
+  }
+
+  .label {
+    display: block;
+    margin-bottom: 12px;
+    color: var(--text-faint);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+  }
+
+  /* ---------- card ---------- */
+
+  .card {
+    position: relative;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    transition: border-color var(--t);
+  }
+
+  .card.dragover { border-color: var(--accent); }
+
+  .card.dragover .drop-overlay {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .drop-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(15, 17, 21, 0.92);
+    border-radius: var(--radius);
+    color: var(--accent);
+    font-size: 14px;
+    font-weight: 500;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--t);
+    z-index: 2;
+  }
+
+  /* ---------- tabs ---------- */
+
+  .tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .tab {
+    flex: 1;
+    padding: 14px 16px;
+    background: none;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    color: var(--text-dim);
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: color var(--t), border-color var(--t), background-color var(--t);
+  }
+
+  .tab:hover { color: var(--text); }
+
+  .tab[aria-selected="true"] {
+    color: var(--text);
+    border-bottom-color: var(--accent);
+  }
+
+  .tab:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+
+  .panel { padding: 24px; }
+
+  .panel[hidden] { display: none; }
+
+  /* ---------- upload ---------- */
+
+  .filedrop {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 40px 24px;
+    border: 1px dashed var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    text-align: center;
+    cursor: pointer;
+    transition: border-color var(--t), background-color var(--t);
+  }
+
+  .filedrop:hover { border-color: var(--accent); }
+
+  .filedrop:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .filedrop-main { font-size: 14px; font-weight: 500; }
+
+  .filedrop-hint { color: var(--text-faint); font-size: 13px; }
+
+  .filedrop-name {
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--accent);
+    word-break: break-all;
+  }
+
+  input[type="file"] { display: none; }
+
+  /* ---------- textarea ---------- */
+
+  textarea {
+    width: 100%;
+    min-height: 200px;
+    padding: 16px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.6;
+    resize: vertical;
+    transition: border-color var(--t);
+  }
+
+  textarea::placeholder { color: var(--text-faint); }
+
+  textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+
+  .field-hint {
+    margin: 8px 0 0;
+    color: var(--text-faint);
+    font-size: 12px;
+  }
+
+  /* ---------- buttons ---------- */
+
+  .panel-actions { padding-top: 0; }
+
+  .actions {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .btn {
+    padding: 10px 20px;
+    background: var(--accent);
+    border: 1px solid var(--accent);
+    border-radius: var(--radius-sm);
+    color: #1a1205;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity var(--t), transform var(--t);
+  }
+
+  .btn:hover:not(:disabled) { opacity: 0.88; }
+
+  .btn:active:not(:disabled) { transform: translateY(1px); }
+
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  .btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  /* ---------- samples ---------- */
+
+  .samples { margin-top: 32px; }
+
+  .sample-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .sample {
+    padding: 7px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-dim);
+    font-family: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    transition: color var(--t), border-color var(--t), background-color var(--t);
+  }
+
+  .sample:hover:not(:disabled) {
+    color: var(--text);
+    border-color: var(--border-strong);
+    background: var(--surface-2);
+  }
+
+  .sample:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  .sample:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  /* ---------- status ---------- */
+
+  .status { margin-top: 32px; }
+
+  .status[hidden] { display: none; }
+
+  .loading {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 20px 24px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-dim);
+    font-size: 14px;
+  }
+
+  .spinner {
+    width: 16px;
+    height: 16px;
+    flex: none;
+    border: 2px solid rgba(245, 166, 35, 0.25);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 700ms linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  @media (prefers-reduced-motion: reduce) {
+    .spinner { animation-duration: 2s; }
+  }
+
+  .alert {
+    padding: 16px 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 2px solid var(--cat-phishing);
+    border-radius: var(--radius);
+    font-size: 14px;
+  }
+
+  .alert.warn { border-left-color: var(--accent); }
+
+  .alert-title {
+    margin: 0 0 4px;
+    font-weight: 600;
+  }
+
+  .alert-body {
+    margin: 0;
+    color: var(--text-dim);
+  }
+
+  /* ---------- result ---------- */
+
+  .result {
+    padding: 24px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+  }
+
+  .result-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .badge {
+    padding: 6px 14px;
+    border: 1px solid currentColor;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .tag {
+    padding: 4px 10px;
+    background: var(--accent-dim);
+    border-radius: var(--radius-sm);
+    color: var(--accent);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .tag.muted {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-faint);
+  }
+
+  .meter-block { margin-top: 24px; }
+
+  .meter-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+
+  .meter-value {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  .meter {
+    height: 6px;
+    background: var(--surface-2);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .meter-fill {
+    height: 100%;
+    border-radius: 3px;
+  }
+
+  .section { margin-top: 24px; }
+
+  .reasoning {
+    margin: 0;
+    color: var(--text);
+    font-size: 14px;
+  }
+
+  .signals {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .signals li {
+    position: relative;
+    padding: 6px 0 6px 20px;
+    color: var(--text-dim);
+    font-size: 14px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .signals li:last-child { border-bottom: 0; }
+
+  .signals li::before {
+    content: "";
+    position: absolute;
+    left: 4px;
+    top: 15px;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--text-faint);
+  }
+
+  details.raw {
+    margin-top: 24px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+  }
+
+  details.raw summary {
+    color: var(--text-faint);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    cursor: pointer;
+    list-style: none;
+    transition: color var(--t);
+  }
+
+  details.raw summary::-webkit-details-marker { display: none; }
+
+  details.raw summary::before {
+    content: "+ ";
+    font-family: var(--mono);
+  }
+
+  details.raw[open] summary::before { content: "- "; }
+
+  details.raw summary:hover { color: var(--text-dim); }
+
+  details.raw summary:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  pre {
+    margin: 16px 0 0;
+    padding: 16px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    overflow-x: auto;
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--text-dim);
+  }
+
+  .note {
+    margin: 0 0 20px;
+    padding: 10px 14px;
+    background: var(--surface-2);
+    border-radius: var(--radius-sm);
+    color: var(--text-dim);
+    font-size: 13px;
+  }
+
+  .note[hidden] { display: none; }
+
+  /* ---------- footer ---------- */
+
+  footer {
+    margin-top: 56px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+    color: var(--text-faint);
+    font-size: 13px;
+  }
+
+  footer a {
+    color: var(--text-dim);
+    text-decoration: none;
+    border-bottom: 1px solid var(--border-strong);
+    transition: color var(--t), border-color var(--t);
+  }
+
+  footer a:hover {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  /* ---------- mobile ---------- */
+
+  @media (max-width: 600px) {
+    .wrap { padding: 40px 16px 32px; }
+    h1 { font-size: 24px; }
+    .panel { padding: 16px; }
+    .filedrop { padding: 32px 16px; }
+    .result { padding: 20px; }
+    .actions { flex-direction: column; align-items: stretch; }
+    .btn { width: 100%; }
+    .sample-row { flex-direction: column; }
+    .sample { width: 100%; text-align: left; }
+    .meter-head { flex-direction: column; gap: 4px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>Email Classifier</h1>
+    <p class="subtitle">Upload an .eml file and an LLM sorts it into one of six categories, with its reasoning.</p>
+  </header>
+
+  <main>
+    <section class="card" id="card">
+      <div class="drop-overlay">Drop the .eml file to classify</div>
+
+      <div class="tabs" role="tablist" aria-label="Input mode">
+        <button class="tab" id="tab-upload" role="tab" aria-selected="true" aria-controls="panel-upload" type="button">Upload .eml</button>
+        <button class="tab" id="tab-paste" role="tab" aria-selected="false" aria-controls="panel-paste" type="button">Paste email text</button>
+      </div>
+
+      <div class="panel" id="panel-upload" role="tabpanel" aria-labelledby="tab-upload">
+        <div class="filedrop" id="filedrop" tabindex="0" role="button" aria-label="Choose an .eml file">
+          <span class="filedrop-main">Choose an .eml file</span>
+          <span class="filedrop-hint">or drop it anywhere on this card</span>
+          <span class="filedrop-name" id="filename" hidden></span>
+        </div>
+        <input type="file" id="fileinput" accept=".eml,message/rfc822">
+      </div>
+
+      <div class="panel" id="panel-paste" role="tabpanel" aria-labelledby="tab-paste" hidden>
+        <label class="sr-only" for="pastebox">Email text</label>
+        <textarea id="pastebox" spellcheck="false" placeholder="Paste the email here.
+
+You can include headers:
+From: someone@example.com
+Subject: Invoice overdue
+
+...or just the body text on its own."></textarea>
+        <p class="field-hint">Missing From / Subject headers are filled in with placeholders before the .eml is sent.</p>
+      </div>
+
+      <div class="panel panel-actions">
+        <div class="actions">
+          <button class="btn" id="submit" type="button">Classify</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="samples">
+      <span class="label" id="samples-label">Try a sample</span>
+      <div class="sample-row" id="sample-row" role="group" aria-labelledby="samples-label"></div>
+    </section>
+
+    <section class="status" id="status" hidden aria-live="polite"></section>
+  </main>
+
+  <footer>
+    Demo project · FastAPI + OpenAI · <a href="https://github.com/renat-ibragimov/email_classifier" target="_blank" rel="noopener noreferrer">github.com/renat-ibragimov/email_classifier</a>
+  </footer>
+
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var CATEGORY_COLORS = {
+    phishing: "var(--cat-phishing)",
+    spam: "var(--cat-spam)",
+    newsletter: "var(--cat-newsletter)",
+    transactional: "var(--cat-transactional)",
+    personal: "var(--cat-personal)",
+    automated: "var(--cat-automated)"
+  };
+
+  var HEADER_RE = /^[A-Za-z][A-Za-z0-9-]*:\s/;
+
+  var card = document.getElementById("card");
+  var tabUpload = document.getElementById("tab-upload");
+  var tabPaste = document.getElementById("tab-paste");
+  var panelUpload = document.getElementById("panel-upload");
+  var panelPaste = document.getElementById("panel-paste");
+  var filedrop = document.getElementById("filedrop");
+  var fileinput = document.getElementById("fileinput");
+  var filename = document.getElementById("filename");
+  var pastebox = document.getElementById("pastebox");
+  var submit = document.getElementById("submit");
+  var sampleRow = document.getElementById("sample-row");
+  var status = document.getElementById("status");
+
+  var selectedFile = null;
+  var busy = false;
+
+  /* ---------- tabs ---------- */
+
+  function selectTab(which) {
+    var isUpload = which === "upload";
+    tabUpload.setAttribute("aria-selected", String(isUpload));
+    tabPaste.setAttribute("aria-selected", String(!isUpload));
+    panelUpload.hidden = !isUpload;
+    panelPaste.hidden = isUpload;
+  }
+
+  tabUpload.addEventListener("click", function () { selectTab("upload"); });
+  tabPaste.addEventListener("click", function () { selectTab("paste"); });
+
+  /* ---------- file picking ---------- */
+
+  function setFile(file) {
+    selectedFile = file;
+    if (file) {
+      filename.textContent = file.name;
+      filename.hidden = false;
+    } else {
+      filename.hidden = true;
+    }
+  }
+
+  filedrop.addEventListener("click", function () { fileinput.click(); });
+
+  filedrop.addEventListener("keydown", function (event) {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      fileinput.click();
+    }
+  });
+
+  fileinput.addEventListener("change", function () {
+    setFile(fileinput.files.length ? fileinput.files[0] : null);
+  });
+
+  /* ---------- drag and drop over the whole card ---------- */
+
+  var dragDepth = 0;
+
+  card.addEventListener("dragenter", function (event) {
+    event.preventDefault();
+    dragDepth += 1;
+    card.classList.add("dragover");
+  });
+
+  card.addEventListener("dragover", function (event) { event.preventDefault(); });
+
+  card.addEventListener("dragleave", function () {
+    dragDepth -= 1;
+    if (dragDepth <= 0) {
+      dragDepth = 0;
+      card.classList.remove("dragover");
+    }
+  });
+
+  card.addEventListener("drop", function (event) {
+    event.preventDefault();
+    dragDepth = 0;
+    card.classList.remove("dragover");
+    if (!event.dataTransfer || !event.dataTransfer.files.length) { return; }
+    selectTab("upload");
+    setFile(event.dataTransfer.files[0]);
+  });
+
+  /* ---------- building an .eml from pasted text ---------- */
+
+  function buildEml(raw) {
+    var text = raw.replace(/\r\n/g, "\n").replace(/^\n+|\s+$/g, "");
+    var lines = text.split("\n");
+    var headers = [];
+    var i = 0;
+
+    while (i < lines.length && HEADER_RE.test(lines[i])) {
+      headers.push(lines[i]);
+      i += 1;
+    }
+
+    var body;
+    if (headers.length) {
+      if (i < lines.length && lines[i].trim() === "") { i += 1; }
+      body = lines.slice(i).join("\n");
+    } else {
+      body = text;
+    }
+
+    function has(name) {
+      return headers.some(function (header) {
+        return header.toLowerCase().indexOf(name + ":") === 0;
+      });
+    }
+
+    if (!has("from")) { headers.unshift("From: pasted-sender@example.com"); }
+    if (!has("to")) { headers.push("To: recipient@example.com"); }
+    if (!has("subject")) { headers.push("Subject: (no subject)"); }
+
+    return headers.join("\r\n") + "\r\n\r\n" + body.replace(/\n/g, "\r\n") + "\r\n";
+  }
+
+  function textToFile(text, name) {
+    return new File([text], name, { type: "message/rfc822" });
+  }
+
+  /* ---------- rendering ---------- */
+
+  function clearStatus() {
+    status.hidden = true;
+    status.textContent = "";
+  }
+
+  function showLoading() {
+    status.hidden = false;
+    status.innerHTML = "";
+    var box = document.createElement("div");
+    box.className = "loading";
+    var spinner = document.createElement("div");
+    spinner.className = "spinner";
+    var text = document.createElement("span");
+    text.textContent = "Classifying — the model usually answers within a few seconds.";
+    box.appendChild(spinner);
+    box.appendChild(text);
+    status.appendChild(box);
+  }
+
+  function showAlert(title, body, variant) {
+    status.hidden = false;
+    status.innerHTML = "";
+    var box = document.createElement("div");
+    box.className = variant === "warn" ? "alert warn" : "alert";
+    var head = document.createElement("p");
+    head.className = "alert-title";
+    head.textContent = title;
+    var text = document.createElement("p");
+    text.className = "alert-body";
+    text.textContent = body;
+    box.appendChild(head);
+    box.appendChild(text);
+    status.appendChild(box);
+  }
+
+  function el(tag, className, text) {
+    var node = document.createElement(tag);
+    if (className) { node.className = className; }
+    if (text !== undefined) { node.textContent = text; }
+    return node;
+  }
+
+  function showResult(data, isDuplicate) {
+    var color = CATEGORY_COLORS[data.category] || "var(--cat-automated)";
+    var confidence = typeof data.confidence === "number" ? data.confidence : 0;
+
+    status.hidden = false;
+    status.innerHTML = "";
+
+    var result = el("div", "result");
+
+    if (isDuplicate) {
+      result.appendChild(el("p", "note", "Already classified earlier — showing the stored result."));
+    }
+
+    var head = el("div", "result-head");
+    var badge = el("span", "badge", data.category || "unknown");
+    badge.style.color = color;
+    head.appendChild(badge);
+    if (data.reviewed) { head.appendChild(el("span", "tag", "Second-pass review")); }
+    if (data.status && data.status !== "classified") {
+      head.appendChild(el("span", "tag muted", data.status));
+    }
+    result.appendChild(head);
+
+    var meterBlock = el("div", "meter-block");
+    var meterHead = el("div", "meter-head");
+    meterHead.appendChild(el("span", "label", "Confidence"));
+    meterHead.appendChild(el("span", "meter-value", confidence.toFixed(2)));
+    var meter = el("div", "meter");
+    var fill = el("div", "meter-fill");
+    fill.style.background = color;
+    meter.appendChild(fill);
+    fill.style.width = Math.max(0, Math.min(1, confidence)) * 100 + "%";
+    meterBlock.appendChild(meterHead);
+    meterBlock.appendChild(meter);
+    result.appendChild(meterBlock);
+
+    if (data.reasoning) {
+      var reasoningSection = el("div", "section");
+      reasoningSection.appendChild(el("span", "label", "Reasoning"));
+      reasoningSection.appendChild(el("p", "reasoning", data.reasoning));
+      result.appendChild(reasoningSection);
+    }
+
+    if (data.signals && data.signals.length) {
+      var signalsSection = el("div", "section");
+      signalsSection.appendChild(el("span", "label", "Signals"));
+      var list = el("ul", "signals");
+      data.signals.forEach(function (signal) { list.appendChild(el("li", null, signal)); });
+      signalsSection.appendChild(list);
+      result.appendChild(signalsSection);
+    }
+
+    var raw = document.createElement("details");
+    raw.className = "raw";
+    var summary = document.createElement("summary");
+    summary.textContent = "Raw JSON";
+    raw.appendChild(summary);
+    raw.appendChild(el("pre", null, JSON.stringify(data, null, 2)));
+    result.appendChild(raw);
+
+    status.appendChild(result);
+  }
+
+  /* ---------- submitting ---------- */
+
+  function detailText(payload, fallback) {
+    if (!payload || payload.detail === undefined) { return fallback; }
+    if (typeof payload.detail === "string") { return payload.detail; }
+    if (Array.isArray(payload.detail) && payload.detail.length && payload.detail[0].msg) {
+      return payload.detail[0].msg;
+    }
+    return fallback;
+  }
+
+  function setBusy(value) {
+    busy = value;
+    submit.disabled = value;
+    submit.textContent = value ? "Classifying…" : "Classify";
+    Array.prototype.forEach.call(sampleRow.children, function (button) {
+      button.disabled = value;
+    });
+  }
+
+  async function classify(file) {
+    if (busy) { return; }
+    setBusy(true);
+    showLoading();
+
+    var form = new FormData();
+    form.append("file", file);
+
+    try {
+      var response = await fetch("/classify/", { method: "POST", body: form });
+
+      if (response.status === 429) {
+        showAlert(
+          "Rate limit reached",
+          "This demo accepts 10 classifications per minute. Give it a minute and try again.",
+          "warn"
+        );
+        return;
+      }
+
+      var payload = null;
+      try { payload = await response.json(); } catch (error) { payload = null; }
+
+      if (response.status === 200 || response.status === 201) {
+        showResult(payload, response.status === 200);
+        return;
+      }
+
+      if (response.status === 422) {
+        showAlert("That file was rejected", detailText(payload, "The file is not a valid .eml."), "warn");
+        return;
+      }
+
+      showAlert(
+        "Classification failed",
+        detailText(payload, "Something went wrong on the server. Please try again."),
+        "error"
+      );
+    } catch (error) {
+      showAlert("Network error", "Could not reach the API. Check your connection and try again.", "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  submit.addEventListener("click", function () {
+    var pasteActive = tabPaste.getAttribute("aria-selected") === "true";
+
+    if (pasteActive) {
+      var text = pastebox.value.trim();
+      if (!text) {
+        showAlert("Nothing to classify", "Paste some email text first.", "warn");
+        return;
+      }
+      classify(textToFile(buildEml(text), "pasted.eml"));
+      return;
+    }
+
+    if (!selectedFile) {
+      showAlert("No file selected", "Choose an .eml file or drop one onto the card.", "warn");
+      return;
+    }
+    classify(selectedFile);
+  });
+
+  /* ---------- samples ---------- */
+
+  async function loadSamples() {
+    try {
+      var response = await fetch("/static/samples/samples.json");
+      var data = await response.json();
+      (data.samples || []).forEach(function (sample) {
+        var button = el("button", "sample", sample.label);
+        button.type = "button";
+        button.title = sample.description;
+        button.addEventListener("click", async function () {
+          if (busy) { return; }
+          setBusy(true);
+          showLoading();
+          try {
+            var file = await fetch("/static/samples/" + sample.filename);
+            var text = await file.text();
+            setBusy(false);
+            selectTab("upload");
+            setFile(textToFile(text, sample.filename));
+            classify(textToFile(text, sample.filename));
+          } catch (error) {
+            setBusy(false);
+            showAlert("Could not load the sample", "Try picking another one.", "error");
+          }
+        });
+        sampleRow.appendChild(button);
+      });
+    } catch (error) {
+      sampleRow.appendChild(el("span", "field-hint", "Samples are unavailable right now."));
+    }
+  }
+
+  clearStatus();
+  loadSamples();
+})();
+</script>
+</body>
+</html>

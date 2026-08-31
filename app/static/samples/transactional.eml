@@ -1,0 +1,33 @@
+From: noreply@orders.amazon.example.com
+To: john.doe@example.com
+Subject: Your order #112-4839571-2948376 has shipped
+Date: Thu, 01 May 2025 16:45:00 +0000
+Message-ID: <20250501164500.order@amazon.example.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: 7bit
+
+Hello John,
+
+Your order has shipped and is on its way!
+
+Order #112-4839571-2948376
+Shipped on: May 1, 2025
+Estimated delivery: May 3-5, 2025
+Carrier: UPS
+Tracking number: 1Z999AA10123456784
+
+Items in this shipment:
+- Logitech MX Master 3S Wireless Mouse (Qty: 1) - $89.99
+- USB-C Hub 7-in-1 (Qty: 1) - $34.99
+
+Shipping address:
+John Doe
+123 Main Street
+San Francisco, CA 94102
+
+Track your package:
+https://orders.amazon.example.com/track/1Z999AA10123456784
+
+Thank you for shopping with us.
+Amazon Customer Service

@@ -9,6 +9,7 @@ Each email is assigned one of six categories (**spam**, **phishing**, **newslett
 - `POST /classify/` - upload an `.eml` file and get a classification back
 - `GET /classify/{id}/` - fetch a previously classified record by ID
 - `GET /health` - liveness probe, returns `{"status": "ok"}`
+- **Demo frontend** at `/` - a single static page (no build step, no framework) to upload an `.eml`, paste raw email text, or classify one of the bundled samples
 - **Rate limiting** on `POST /classify/`: 10 requests per minute per client IP (in-memory, via `slowapi`), keyed off `X-Forwarded-For` so it works behind a reverse proxy
 - **Deduplication** by SHA-256 of raw `.eml` bytes; the same file uploaded twice returns the cached result with `200` instead of re-running the LLM
 - **Two-pass classification**: a stricter "senior analyst" review runs when first-pass confidence is below the threshold (`reviewed=true` in the response)
@@ -37,7 +38,7 @@ make run
 docker compose up --build
 ```
 
-The API is then reachable at `http://localhost:8000`.
+The demo page is then at [`http://localhost:8000`](http://localhost:8000), and the API at the same host.
 
 **Swagger UI** is at [`http://localhost:8000/docs`](http://localhost:8000/docs) — the easiest way to upload a sample `.eml` and try the endpoints.
 **ReDoc** is at [`http://localhost:8000/redoc`](http://localhost:8000/redoc).
@@ -98,6 +99,7 @@ curl http://localhost:8000/classify/<record-id>/
 | | `404 Not Found` | Unknown ID |
 | | `422 Unprocessable Content` | Invalid UUID |
 | `GET /health` | `200 OK` | Always, while the process is up |
+| `GET /` | `200 OK` | Demo frontend page |
 
 ## Deployment
 
@@ -132,6 +134,7 @@ Layered FastAPI service. Request flow: `routers/classify.py` → `Classification
 ```
 app/
 ├── routers/         HTTP handlers (POST /classify/, GET /classify/{id}/, GET /health)
+├── static/          Demo frontend: index.html + samples/ (.eml files + samples.json manifest)
 ├── services/
 │   ├── classification_service.py   Orchestration: dedup, parse-then-classify-then-persist
 │   ├── classifier.py               OpenAI tool-use, two-pass review logic
@@ -188,4 +191,4 @@ Tests run in a dedicated Docker Compose stack (`docker-compose-test.yml`) with a
 make cov
 ```
 
-Current coverage: **100%** across 24 modules (268 statements), 58 tests.
+Current coverage: **100%** across 25 modules (276 statements), 62 tests.
