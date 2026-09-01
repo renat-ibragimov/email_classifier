@@ -443,6 +443,25 @@ textarea::placeholder { color: var(--muted); }
   color: var(--muted);
 }
 
+.relink {
+  appearance: none;
+  font: inherit;
+  font-size: 10px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--ink);
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--ink);
+  padding: 0;
+  margin-left: 8px;
+  cursor: pointer;
+  transition: opacity var(--t);
+}
+
+.relink:hover:not(:disabled) { opacity: .65; }
+.relink:disabled { opacity: .4; cursor: default; }
+
 .verdict {
   display: block;
   padding: 16px 18px;
@@ -742,6 +761,7 @@ textarea::placeholder { color: var(--muted); }
       reviewTag: "Second-pass review",
       rawToggle: "Raw JSON",
       duplicateNote: "Already classified earlier — showing the stored result.",
+      reclassify: "Re-classify",
       rateTitle: "Rate limit reached",
       rateBody: "This demo accepts 10 classifications per minute. Give it a minute and try again.",
       rejectedTitle: "That file was rejected",
@@ -803,6 +823,7 @@ textarea::placeholder { color: var(--muted); }
       reviewTag: "Повторна перевірка",
       rawToggle: "Сирий JSON",
       duplicateNote: "Цей лист уже класифіковано — показано збережений результат.",
+      reclassify: "Перевірити знову",
       rateTitle: "Перевищено ліміт запитів",
       rateBody: "Демо приймає 10 класифікацій на хвилину. Зачекайте хвилину та спробуйте знову.",
       rejectedTitle: "Файл відхилено",
@@ -909,6 +930,7 @@ textarea::placeholder { color: var(--muted); }
   var samples = [];
   var uploadEnvelope = null;
   var pasteEnvelope = null;
+  var lastSubmitted = null;
 
   /* The current view is kept as a thunk so switching language re-renders it
      from the data already in hand, without re-running any classification. */
@@ -1309,7 +1331,15 @@ textarea::placeholder { color: var(--muted); }
     setRaw(data);
 
     if (isDuplicate) {
-      status.appendChild(el("p", "dup-note", t("duplicateNote")));
+      var note = el("p", "dup-note", t("duplicateNote"));
+      var again = el("button", "relink", t("reclassify"));
+      again.type = "button";
+      again.disabled = busy;
+      again.addEventListener("click", function () {
+        if (lastSubmitted) { classify(lastSubmitted, true); }
+      });
+      note.appendChild(again);
+      status.appendChild(note);
     }
 
     status.appendChild(
@@ -1379,20 +1409,27 @@ textarea::placeholder { color: var(--muted); }
     Array.prototype.forEach.call(sampleRow.children, function (button) {
       button.disabled = value;
     });
+    /* The re-classify link is rendered by showResult, which runs while the
+       request that produced it is still in flight — so it is born disabled and
+       has to be released here, on the same sweep as everything else. */
+    var again = status.querySelector(".relink");
+    if (again) { again.disabled = value; }
   }
 
-  async function classify(file) {
+  async function classify(file, force) {
     if (busy) { return; }
     setBusy(true);
     showLoading();
     setRaw(null);
+    lastSubmitted = file;
 
     var form = new FormData();
     form.append("file", file);
     form.append("language", lang);
 
     try {
-      var response = await fetch("/classify/", { method: "POST", body: form });
+      var url = force ? "/classify/?force=true" : "/classify/";
+      var response = await fetch(url, { method: "POST", body: form });
 
       if (response.status === 429) {
         showAlert("rateTitle", "rateBody", "warn");
@@ -1403,7 +1440,7 @@ textarea::placeholder { color: var(--muted); }
       try { payload = await response.json(); } catch (error) { payload = null; }
 
       if (response.status === 200 || response.status === 201) {
-        showResult(payload, response.status === 200);
+        showResult(payload, response.status === 200 && !force);
         return;
       }
 

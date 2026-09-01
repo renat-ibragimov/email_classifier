@@ -14,9 +14,11 @@ Each email is assigned one of six categories (**spam**, **phishing**, **newslett
 - **Demo frontend** at `/` - a single static page (no build step, no framework) to upload an `.eml`, paste raw email text, or classify one of the bundled samples. It parses the headers client-side into an ENVELOPE preview before sending, and reads the category into a FLAGGED / CLEAR verdict of its own
 - **Rate limiting** on `POST /classify/`: 10 requests per minute per client IP (in-memory, via `slowapi`), keyed off `X-Forwarded-For` so it works behind a reverse proxy
 - **Deduplication** by SHA-256 of raw `.eml` bytes plus the requested language; the same file uploaded twice in the same language returns the cached result with `200` instead of re-running the LLM
-- **Two-pass classification**: a stricter "senior analyst" review runs when first-pass confidence is below the threshold (`reviewed=true` in the response)
+- **Two-pass classification**: a stricter "senior analyst" review runs when first-pass confidence is below the threshold, or when the email touches a high-risk topic (`reviewed=true` in the response)
 - **OpenAI tool use** is forced via `tool_choice` so the model can only return a valid category from the enum
-- **Language enforcement**: for `uk`, the instruction leads the prompt, the tool schema repeats it, and a Cyrillic check retries the call once if the model answered in English anyway
+- **Analysis is language-independent**: both passes always run in English; Ukrainian output is a separate translation step applied to the finished result, so the verdict never depends on the requested language
+- **High-risk topics always get a second opinion**: credential/urgency cues in the subject or body force the review pass even when the first pass is confident
+- **Deterministic**: every OpenAI call runs at `temperature=0`
 - **Concurrent-safe**: uploads with the same content racing in parallel are coalesced via a unique constraint and a `IntegrityError` retry; only one classification runs
 - **Two languages**: English and Ukrainian, both in the UI and in the LLM-written parts of the answer (see [Languages](#languages))
 
@@ -78,11 +80,16 @@ curl -X POST http://localhost:8000/classify/ \
 
 Deduplication is scoped to the language: the content hash covers the file bytes *and* the language, so the same `.eml` asked for as `en` and then as `uk` yields two records — each classified once — instead of the second request getting the first one's reasoning back.
 
-Getting a model to hold a language reliably takes more than one instruction, so `uk` is enforced in three layers:
+To re-run a classification instead of getting the cached one back, add `?force=true`. The stored record is overwritten in place — same `id`, same `created_at` — and the response is `200`. The demo page exposes it as a **Re-classify** link next to the duplicate notice.
 
-1. The Ukrainian requirement **leads** the system prompt (both the first pass and the review pass) rather than trailing it.
-2. The `classify_email` tool schema is rebuilt per request — for `uk`, the `reasoning` description and the `signals` item description say "Written in Ukrainian."
-3. After the call, `reasoning` is checked: if fewer than 50% of its letters are Cyrillic, the same pass is retried once with an explicit `Respond in Ukrainian only.` line. A second miss is logged as a warning and the answer is kept — a stray English reasoning is still a usable classification, not a failure.
+```bash
+curl -X POST "http://localhost:8000/classify/?force=true" \
+     -F "file=@tests/fixtures/spam.eml"
+```
+
+**Analysis quality does not depend on the requested language.** Both classification passes always run in English against the same prompts and the same tool schema. When `uk` is requested, one extra `translate_result` call renders the finished `reasoning` and `signals` into Ukrainian; `category`, `confidence` and `reviewed` come from the English analysis and are never touched by it.
+
+The translation is deliberately unable to break a classification: if the call fails, or comes back with a different number of signals, the warning is logged and the English text is returned as-is.
 
 ## Trying the API
 
@@ -115,7 +122,7 @@ curl http://localhost:8000/classify/<record-id>/
 | Endpoint | Status | When |
 | --- | --- | --- |
 | `POST /classify/` | `201 Created` | New file, classification performed |
-| | `200 OK` | Duplicate of an already-classified file |
+| | `200 OK` | Duplicate of an already-classified file, or a `?force=true` re-classification of an existing record |
 | | `422 Unprocessable Content` | Wrong extension, file > 10 MB, missing `From` header, or unknown `language` |
 | | `429 Too Many Requests` | More than 10 requests in a minute from the same client IP |
 | | `500 Internal Server Error` | LLM call failed; record is persisted with `status=failed` and can be retried by re-uploading |
@@ -184,6 +191,8 @@ app/
 - **Re-classification on non-terminal status.** Records in `PENDING` or `FAILED` are re-classified on a subsequent upload; only `CLASSIFIED` is treated as a terminal hit.
 - **HTML body is kept.** `_extract_body` flattens `text/plain` then `text/html` parts because phishing signals (suspicious links, hidden URLs) often live in the HTML.
 - **The demo entrypoints are uncached.** `/` and `/static/samples/samples.json` are served with `Cache-Control: no-cache` (the manifest via an explicit route declared *before* the `/static` mount, so it wins the match), and the page fetches the manifest with `cache: "no-store"`. Without it, a redeploy showed up only after a hard refresh. The `.eml` samples never change, so they stay cacheable.
+- **High-risk topics always get a second opinion.** The review pass normally runs only on low confidence. `HIGH_RISK_CUES` in `services/classifier.py` — password, passcode, verify your account, login, sign in, portal, reset, update your, deadline, expires, urgent, immediately, suspended — is matched case-insensitively against subject + body, and any hit forces the review even at high confidence. A confidently wrong "personal" on a credential-harvesting email is the expensive failure here; a second call is the cheap insurance. The review prompt asks the analyst to state what would have to be true for such an email to be safe before keeping a benign category.
+- **Analyze first, translate after.** The analysis runs in English regardless of the requested output language, so a Ukrainian request gets exactly the same verdict as an English one. Translating the finished result also keeps the failure contained: a broken translation degrades to English text, it cannot change a category.
 - **The verdict is the frontend's own reading.** `FLAGGED` / `CLEAR` is derived in the browser from `category` (phishing and spam are flagged); the API has no verdict field and stays the single source of the category itself.
 - **Enums are PostgreSQL-native.** `classification_status` and `email_category` are `CREATE TYPE` enums, owned by the Alembic migration. SQLAlchemy column definitions use `create_type=False` — the migration is the single source of truth.
 
@@ -215,11 +224,13 @@ Tests run in a dedicated Docker Compose stack (`docker-compose-test.yml`) with a
 - **Unit-level**: `hasher`, `parser`, `classifier` (with the cached OpenAI client factory patched), `classification_service` (with mocked repo + classifier), rate-limit client-IP resolution, helper DTOs and enums.
 - **Repository integration**: real async sessions against `test_db`, covers `find_by_id`, `find_by_hash`, `create` (including the `IntegrityError` race and the defensive `RuntimeError` guard for the impossible "row disappeared" state), and `save`.
 - **Router integration**: ASGI in-process via `httpx.AsyncClient` + `ASGITransport`. Tests exercise the full DI chain (`get_session` → `get_repo` → service → repo) so the `AsyncSession` lifecycle is covered without overrides; only `classify_email` is patched to avoid real OpenAI calls. Rate-limit counters are reset between tests by an autouse fixture, and a dedicated test drives `POST /classify/` past the limit to assert the `429`.
-- **Languages**: the default (`en`), the Ukrainian instruction leading both prompt passes, the per-language tool schema, the Cyrillic check and its single retry (including the give-up-and-log path), language-scoped dedup (same file as `en` then `uk` → two `201`s), and `422` on an unknown language.
+- **Languages**: the default (`en`), analysis prompts and tool schema staying English for both languages, the translation call receiving the English result and its output being what the API returns, both fallback paths (failed call, signal-count mismatch), language-scoped dedup (same file as `en` then `uk` → two `201`s), and `422` on an unknown language.
+- **Review triggers**: low confidence, and every high-risk cue forcing a review at high confidence; a benign confident email stays single-pass.
+- **Force**: `?force=true` bypassing the cache, persisting the new verdict on the same row, and staying scoped to one language.
 - **Caching**: `/` and the samples manifest carry `Cache-Control: no-cache`; the `.eml` samples do not.
 
 ```bash
 make cov
 ```
 
-Current coverage: **100%** across 24 modules (327 statements), 97 tests.
+Current coverage: **100%** across 24 modules (326 statements), 112 tests.

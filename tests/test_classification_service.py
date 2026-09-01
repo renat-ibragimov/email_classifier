@@ -196,3 +196,56 @@ class TestLanguage:
 
         hashes = [call.args[0] for call in repo.find_by_hash.call_args_list]
         assert hashes[0] != hashes[1]
+
+
+class TestForce:
+    async def test_classified_record_is_reused_without_force(self):
+        existing = _build_record(status=ClassificationStatusEnum.CLASSIFIED)
+        repo = AsyncMock()
+        repo.find_by_hash = AsyncMock(return_value=existing)
+
+        with patch("app.services.classification_service.classify_email") as mock_classify:
+            service = ClassificationService(repo)
+            record, is_new = await service.classify(VALID_EML)
+
+        assert record is existing
+        assert is_new is False
+        mock_classify.assert_not_called()
+
+    async def test_force_reclassifies_a_classified_record(self):
+        existing = _build_record(status=ClassificationStatusEnum.CLASSIFIED)
+        repo = AsyncMock()
+        repo.find_by_hash = AsyncMock(return_value=existing)
+
+        with patch(
+            "app.services.classification_service.classify_email",
+            new=AsyncMock(return_value=_classification_result(EmailCategoryEnum.PHISHING)),
+        ) as mock_classify:
+            service = ClassificationService(repo)
+            record, is_new = await service.classify(VALID_EML, force=True)
+
+        assert record is existing
+        # The row already existed, so this is an update rather than a creation.
+        assert is_new is False
+        assert record.category == EmailCategoryEnum.PHISHING
+        mock_classify.assert_called_once()
+        repo.create.assert_not_called()
+        repo.save.assert_called_once()
+
+    async def test_force_reclassifies_a_race_lost_classified_winner(self):
+        winner = _build_record(status=ClassificationStatusEnum.CLASSIFIED)
+        repo = AsyncMock()
+        repo.find_by_hash = AsyncMock(return_value=None)
+        repo.create = AsyncMock(return_value=(winner, False))
+
+        with patch(
+            "app.services.classification_service.classify_email",
+            new=AsyncMock(return_value=_classification_result(EmailCategoryEnum.PHISHING)),
+        ) as mock_classify:
+            service = ClassificationService(repo)
+            record, is_new = await service.classify(VALID_EML, force=True)
+
+        assert record is winner
+        assert is_new is False
+        assert record.category == EmailCategoryEnum.PHISHING
+        mock_classify.assert_called_once()

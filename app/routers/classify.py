@@ -2,7 +2,7 @@ import logging
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request, UploadFile, status
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, UploadFile, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -42,7 +42,9 @@ RepoDep = Annotated[ClassificationRepository, Depends(get_repo)]
         "is rejected with `422`. The `category` value is always one of the English enum "
         "members regardless of the language.\n\n"
         "Deduplication is scoped to the language: the same file requested as `en` and then "
-        "as `uk` produces two records, each classified once."
+        "as `uk` produces two records, each classified once. Pass `?force=true` to re-run the "
+        "classification and overwrite the stored record instead of returning the cached one; "
+        "the record keeps its id and `created_at`."
     ),
     responses={
         status.HTTP_200_OK: {
@@ -66,6 +68,7 @@ async def post_classify(
     file: UploadFile,
     repo: RepoDep,
     language: Annotated[LanguageEnum, Form(description="Language of the reasoning and signals")] = LanguageEnum.EN,
+    force: Annotated[bool, Query(description="Re-classify and overwrite the cached record")] = False,
 ) -> JSONResponse:
     """Accept an .eml file, classify it using LLM in the requested language, and store the result."""
     if not file.filename or not file.filename.endswith(".eml"):
@@ -84,7 +87,7 @@ async def post_classify(
     service = ClassificationService(repo)
 
     try:
-        record, is_new = await service.classify(content, language)
+        record, is_new = await service.classify(content, language, force=force)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e)) from e
     except Exception as e:

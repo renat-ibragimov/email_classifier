@@ -1,5 +1,4 @@
 import json
-import logging
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -7,15 +6,13 @@ import pytest
 from app.helpers.dto import ParsedEmail
 from app.helpers.enums import EmailCategoryEnum, LanguageEnum
 from app.services.classifier import (
-    RETRY_USER_LINE,
+    HIGH_RISK_CUES,
     REVIEW_PROMPT,
     SYSTEM_PROMPT,
-    UKRAINIAN_INSTRUCTION,
-    build_classify_tool,
     classify_email,
-    cyrillic_ratio,
     get_client,
-    is_ukrainian,
+    has_high_risk_cues,
+    translate_result,
 )
 
 PARSED = ParsedEmail(
@@ -26,8 +23,16 @@ PARSED = ParsedEmail(
     body="b",
 )
 
-UK_REASONING = "Лист містить ознаки фішингу."
+RISKY = ParsedEmail(
+    sender="it@corp-services.example.com",
+    to="staff@example.com",
+    subject="Password policy update",
+    date="d",
+    body="Follow the link to reset your credentials.",
+)
+
 EN_REASONING = "The email shows signs of phishing."
+UK_REASONING = "Лист містить ознаки фішингу."
 
 
 def _mock_response(category, confidence, reasoning="r", signals=None):
@@ -40,6 +45,20 @@ def _mock_response(category, confidence, reasoning="r", signals=None):
     tc = MagicMock()
     tc.function.arguments = args
     return MagicMock(choices=[MagicMock(message=MagicMock(tool_calls=[tc]))])
+
+
+def _translation_response(reasoning, signals):
+    tc = MagicMock()
+    tc.function.arguments = json.dumps({"reasoning": reasoning, "signals": signals})
+    return MagicMock(choices=[MagicMock(message=MagicMock(tool_calls=[tc]))])
+
+
+def _prompts(mock_create):
+    return [call.kwargs["messages"][0]["content"] for call in mock_create.call_args_list]
+
+
+def _tool_names(mock_create):
+    return [call.kwargs["tools"][0]["function"]["name"] for call in mock_create.call_args_list]
 
 
 class TestClassifyEmail:
@@ -103,180 +122,202 @@ class TestClassifyEmail:
             with pytest.raises(RuntimeError, match="did not return a tool call"):
                 await classify_email(PARSED)
 
+    async def test_every_call_is_deterministic(self):
+        with patch("app.services.classifier.get_client") as mock_get_client:
+            mock_instance = mock_get_client.return_value
+            mock_instance.chat.completions.create = AsyncMock(
+                side_effect=[
+                    _mock_response("newsletter", 0.5, EN_REASONING, ["a"]),
+                    _mock_response("phishing", 0.92, EN_REASONING, ["a"]),
+                    _translation_response(UK_REASONING, ["а"]),
+                ]
+            )
 
-class TestLanguage:
-    async def test_default_prompt_has_no_language_instruction(self):
+            await classify_email(PARSED, LanguageEnum.UK)
+
+            temperatures = [
+                call.kwargs["temperature"] for call in mock_instance.chat.completions.create.call_args_list
+            ]
+            assert temperatures == [0, 0, 0]
+
+
+class TestAnalysisLanguage:
+    async def test_english_prompts_carry_no_language_instruction(self):
         with patch("app.services.classifier.get_client") as mock_get_client:
             mock_instance = mock_get_client.return_value
             mock_instance.chat.completions.create = AsyncMock(return_value=_mock_response("spam", 0.95))
 
             await classify_email(PARSED)
 
-            prompt = mock_instance.chat.completions.create.call_args.kwargs["messages"][0]["content"]
-            assert prompt == SYSTEM_PROMPT
+            assert _prompts(mock_instance.chat.completions.create) == [SYSTEM_PROMPT]
 
-    async def test_ukrainian_instruction_leads_the_prompt(self):
-        with patch("app.services.classifier.get_client") as mock_get_client:
-            mock_instance = mock_get_client.return_value
-            mock_instance.chat.completions.create = AsyncMock(
-                return_value=_mock_response("spam", 0.95, UK_REASONING)
-            )
-
-            await classify_email(PARSED, LanguageEnum.UK)
-
-            prompt = mock_instance.chat.completions.create.call_args.kwargs["messages"][0]["content"]
-            assert prompt.startswith(UKRAINIAN_INSTRUCTION)
-            assert prompt.endswith(SYSTEM_PROMPT)
-
-    async def test_review_pass_also_leads_with_the_instruction(self):
+    async def test_uk_analysis_prompts_are_identical_to_english(self):
         with patch("app.services.classifier.get_client") as mock_get_client:
             mock_instance = mock_get_client.return_value
             mock_instance.chat.completions.create = AsyncMock(
                 side_effect=[
-                    _mock_response("newsletter", 0.5, UK_REASONING),
-                    _mock_response("phishing", 0.92, UK_REASONING),
+                    _mock_response("newsletter", 0.5, EN_REASONING, ["a"]),
+                    _mock_response("phishing", 0.92, EN_REASONING, ["a"]),
+                    _translation_response(UK_REASONING, ["б"]),
                 ]
             )
 
             await classify_email(PARSED, LanguageEnum.UK)
 
-            prompts = [
-                call.kwargs["messages"][0]["content"]
-                for call in mock_instance.chat.completions.create.call_args_list
-            ]
-            assert prompts[1].startswith(UKRAINIAN_INSTRUCTION)
-            assert prompts[1].endswith(REVIEW_PROMPT)
-            assert all(prompt.startswith(UKRAINIAN_INSTRUCTION) for prompt in prompts)
+            analysis_prompts = _prompts(mock_instance.chat.completions.create)[:2]
+            assert analysis_prompts == [SYSTEM_PROMPT, REVIEW_PROMPT]
+            assert all("Ukrainian" not in prompt for prompt in analysis_prompts)
 
-
-class TestClassifyToolSchema:
-    def _fields(self, language):
-        properties = build_classify_tool(language)["function"]["parameters"]["properties"]
-        return properties["reasoning"]["description"], properties["signals"]["items"]["description"]
-
-    def test_uk_marks_reasoning_and_signal_items(self):
-        reasoning, signal_item = self._fields(LanguageEnum.UK)
-
-        assert "Ukrainian" in reasoning
-        assert "Ukrainian" in signal_item
-
-    def test_en_leaves_the_descriptions_alone(self):
-        reasoning, signal_item = self._fields(LanguageEnum.EN)
-
-        assert "Ukrainian" not in reasoning
-        assert "Ukrainian" not in signal_item
-
-    def test_category_enum_is_unchanged_by_language(self):
-        for language in (LanguageEnum.EN, LanguageEnum.UK):
-            properties = build_classify_tool(language)["function"]["parameters"]["properties"]
-            assert properties["category"]["enum"] == [e.value for e in EmailCategoryEnum]
-
-
-class TestCyrillicCheck:
-    @pytest.mark.parametrize(
-        ("text", "expected"),
-        [
-            ("Лист містить ознаки фішингу", 1.0),
-            ("The email shows signs of phishing", 0.0),
-            ("", 0.0),
-            ("123 — !!! ...", 0.0),
-        ],
-    )
-    def test_ratio(self, text, expected):
-        assert cyrillic_ratio(text) == expected
-
-    def test_ukrainian_only_letters_count_as_cyrillic(self):
-        assert cyrillic_ratio("їжак єнот ґанок і") == 1.0
-
-    def test_mixed_text_is_still_ukrainian(self):
-        # A Latin acronym inside Ukrainian prose must not tip the verdict.
-        assert is_ukrainian("Посилання веде на зовнішній домен IT-відділу")
-
-    def test_half_and_half_passes_at_the_threshold(self):
-        assert is_ukrainian("абвг abcd")
-
-    def test_english_is_rejected(self):
-        assert not is_ukrainian(EN_REASONING)
-
-    def test_empty_is_rejected(self):
-        assert not is_ukrainian("")
-
-
-class TestLanguageRetry:
-    async def test_english_answer_is_retried_once(self):
+    async def test_analysis_tool_schema_never_mentions_ukrainian(self):
         with patch("app.services.classifier.get_client") as mock_get_client:
             mock_instance = mock_get_client.return_value
             mock_instance.chat.completions.create = AsyncMock(
                 side_effect=[
-                    _mock_response("phishing", 0.95, EN_REASONING),
-                    _mock_response("phishing", 0.95, UK_REASONING, ["зовнішній домен"]),
+                    _mock_response("spam", 0.95, EN_REASONING, ["a"]),
+                    _translation_response(UK_REASONING, ["в"]),
+                ]
+            )
+
+            await classify_email(PARSED, LanguageEnum.UK)
+
+            analysis_tool = mock_instance.chat.completions.create.call_args_list[0].kwargs["tools"][0]
+            assert "Ukrainian" not in json.dumps(analysis_tool)
+
+
+class TestTranslation:
+    async def test_uk_translates_the_english_result(self):
+        with patch("app.services.classifier.get_client") as mock_get_client:
+            mock_instance = mock_get_client.return_value
+            mock_instance.chat.completions.create = AsyncMock(
+                side_effect=[
+                    _mock_response("phishing", 0.95, EN_REASONING, ["external domain", "urgency"]),
+                    _translation_response(UK_REASONING, ["зовнішній домен", "терміновість"]),
                 ]
             )
 
             result = await classify_email(PARSED, LanguageEnum.UK)
 
-            assert mock_instance.chat.completions.create.call_count == 2
+            create = mock_instance.chat.completions.create
+            assert _tool_names(create) == ["classify_email", "translate_result"]
+
+            # The translation call is handed the English analysis output.
+            sent = json.loads(create.call_args_list[1].kwargs["messages"][1]["content"])
+            assert sent == {"reasoning": EN_REASONING, "signals": ["external domain", "urgency"]}
+
             assert result.reasoning == UK_REASONING
-            assert result.signals == ["зовнішній домен"]
+            assert result.signals == ["зовнішній домен", "терміновість"]
+            # The verdict comes from the English analysis, untouched by translation.
+            assert result.category == EmailCategoryEnum.PHISHING
+            assert result.confidence == 0.95
             assert result.reviewed is False
 
-            retry_message = mock_instance.chat.completions.create.call_args.kwargs["messages"][1]["content"]
-            assert retry_message.endswith(RETRY_USER_LINE)
-
-    async def test_ukrainian_answer_is_not_retried(self):
+    async def test_english_is_never_translated(self):
         with patch("app.services.classifier.get_client") as mock_get_client:
             mock_instance = mock_get_client.return_value
             mock_instance.chat.completions.create = AsyncMock(
-                return_value=_mock_response("phishing", 0.95, UK_REASONING)
+                return_value=_mock_response("spam", 0.95, EN_REASONING, ["a"])
             )
 
-            await classify_email(PARSED, LanguageEnum.UK)
+            result = await classify_email(PARSED)
 
             assert mock_instance.chat.completions.create.call_count == 1
-
-    async def test_english_request_is_never_retried(self):
-        with patch("app.services.classifier.get_client") as mock_get_client:
-            mock_instance = mock_get_client.return_value
-            mock_instance.chat.completions.create = AsyncMock(
-                return_value=_mock_response("phishing", 0.95, EN_REASONING)
-            )
-
-            await classify_email(PARSED)
-
-            assert mock_instance.chat.completions.create.call_count == 1
-
-    async def test_second_miss_is_kept_and_logged(self, caplog):
-        with patch("app.services.classifier.get_client") as mock_get_client:
-            mock_instance = mock_get_client.return_value
-            mock_instance.chat.completions.create = AsyncMock(
-                return_value=_mock_response("phishing", 0.95, EN_REASONING)
-            )
-
-            with caplog.at_level(logging.WARNING, logger="app.services.classifier"):
-                result = await classify_email(PARSED, LanguageEnum.UK)
-
-            assert mock_instance.chat.completions.create.call_count == 2
             assert result.reasoning == EN_REASONING
-            assert "still did not answer in Ukrainian" in caplog.text
 
-    async def test_retry_runs_per_pass(self):
-        # Low confidence first: the review pass gets its own guard and its own retry.
+    async def test_failed_translation_falls_back_to_english(self, caplog):
         with patch("app.services.classifier.get_client") as mock_get_client:
             mock_instance = mock_get_client.return_value
             mock_instance.chat.completions.create = AsyncMock(
                 side_effect=[
-                    _mock_response("newsletter", 0.5, EN_REASONING),
-                    _mock_response("newsletter", 0.5, UK_REASONING),
-                    _mock_response("phishing", 0.93, EN_REASONING),
-                    _mock_response("phishing", 0.93, UK_REASONING),
+                    _mock_response("phishing", 0.95, EN_REASONING, ["external domain"]),
+                    RuntimeError("translation api down"),
                 ]
             )
 
             result = await classify_email(PARSED, LanguageEnum.UK)
 
-            assert mock_instance.chat.completions.create.call_count == 4
+            assert result.reasoning == EN_REASONING
+            assert result.signals == ["external domain"]
+            assert result.category == EmailCategoryEnum.PHISHING
+            assert "Translation call failed" in caplog.text
+
+    async def test_signal_count_mismatch_falls_back_to_english(self, caplog):
+        with patch("app.services.classifier.get_client") as mock_get_client:
+            mock_instance = mock_get_client.return_value
+            mock_instance.chat.completions.create = AsyncMock(
+                side_effect=[
+                    _mock_response("phishing", 0.95, EN_REASONING, ["one", "two"]),
+                    _translation_response(UK_REASONING, ["один"]),
+                ]
+            )
+
+            result = await classify_email(PARSED, LanguageEnum.UK)
+
+            assert result.reasoning == EN_REASONING
+            assert result.signals == ["one", "two"]
+            assert "did not match the source shape" in caplog.text
+
+    async def test_empty_result_skips_the_translation_call(self):
+        with patch("app.services.classifier.get_client") as mock_get_client:
+            mock_instance = mock_get_client.return_value
+            mock_instance.chat.completions.create = AsyncMock(return_value=_mock_response("spam", 0.95, "", []))
+
+            await classify_email(PARSED, LanguageEnum.UK)
+
+            assert mock_instance.chat.completions.create.call_count == 1
+
+    async def test_translate_result_returns_input_when_nothing_to_translate(self):
+        assert await translate_result("", []) == ("", [])
+
+
+class TestHighRiskCues:
+    @pytest.mark.parametrize("cue", HIGH_RISK_CUES)
+    def test_every_cue_is_detected_in_the_body(self, cue):
+        email = ParsedEmail(sender="a@b.com", to="c@d.com", subject="s", date="d", body=f"text {cue} text")
+        assert has_high_risk_cues(email)
+
+    def test_detected_in_the_subject(self):
+        email = ParsedEmail(sender="a@b.com", to="c@d.com", subject="Account SUSPENDED", date="d", body="hi")
+        assert has_high_risk_cues(email)
+
+    def test_matching_is_case_insensitive(self):
+        email = ParsedEmail(sender="a@b.com", to="c@d.com", subject="s", date="d", body="Reset Your PASSWORD")
+        assert has_high_risk_cues(email)
+
+    def test_benign_email_has_no_cues(self):
+        email = ParsedEmail(
+            sender="a@b.com", to="c@d.com", subject="Dinner on Saturday", date="d", body="See you at eight."
+        )
+        assert not has_high_risk_cues(email)
+
+    async def test_review_runs_on_cues_despite_high_confidence(self):
+        with patch("app.services.classifier.get_client") as mock_get_client:
+            mock_instance = mock_get_client.return_value
+            mock_instance.chat.completions.create = AsyncMock(
+                side_effect=[
+                    _mock_response("transactional", 0.99),
+                    _mock_response("phishing", 0.97, "after review"),
+                ]
+            )
+
+            result = await classify_email(RISKY)
+
+            assert mock_instance.chat.completions.create.call_count == 2
+            assert _prompts(mock_instance.chat.completions.create)[1] == REVIEW_PROMPT
             assert result.reviewed is True
-            assert result.reasoning == UK_REASONING
+            assert result.category == EmailCategoryEnum.PHISHING
+
+    async def test_no_review_for_a_benign_confident_email(self):
+        benign = ParsedEmail(
+            sender="a@b.com", to="c@d.com", subject="Dinner on Saturday", date="d", body="See you at eight."
+        )
+        with patch("app.services.classifier.get_client") as mock_get_client:
+            mock_instance = mock_get_client.return_value
+            mock_instance.chat.completions.create = AsyncMock(return_value=_mock_response("personal", 0.99))
+
+            result = await classify_email(benign)
+
+            assert mock_instance.chat.completions.create.call_count == 1
+            assert result.reviewed is False
 
 
 class TestGetClient:

@@ -33,10 +33,10 @@ def mock_classifier():
         yield mock
 
 
-async def _post(eml_bytes, filename="email.eml", language=None):
+async def _post(eml_bytes, filename="email.eml", language=None, force=None):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         return await client.post(
-            "/classify/",
+            "/classify/" if force is None else f"/classify/?force={force}",
             files={"file": (filename, eml_bytes, "application/octet-stream")},
             data={} if language is None else {"language": language},
         )
@@ -135,6 +135,55 @@ class TestLanguage:
         response = await _post(VALID_EML, language="de")
 
         assert response.status_code == 422
+
+
+class TestForce:
+    async def test_bypasses_the_cache_and_updates_the_record(self, db_session, mock_classifier):
+        first = await _post(VALID_EML)
+        assert first.status_code == 201
+        assert first.json()["category"] == "spam"
+
+        mock_classifier.return_value = _result(EmailCategoryEnum.PHISHING, reviewed=True)
+        second = await _post(VALID_EML, force="true")
+
+        assert second.status_code == 200
+        assert mock_classifier.call_count == 2
+        body = second.json()
+        # Same row, refreshed verdict.
+        assert body["id"] == first.json()["id"]
+        assert body["created_at"] == first.json()["created_at"]
+        assert body["category"] == "phishing"
+        assert body["reviewed"] is True
+
+    async def test_update_is_persisted(self, db_session, mock_classifier):
+        first = await _post(VALID_EML)
+        mock_classifier.return_value = _result(EmailCategoryEnum.PHISHING)
+        await _post(VALID_EML, force="true")
+
+        fetched = await _get(first.json()["id"])
+
+        assert fetched.status_code == 200
+        assert fetched.json()["category"] == "phishing"
+
+    async def test_defaults_to_using_the_cache(self, db_session, mock_classifier):
+        await _post(VALID_EML)
+        response = await _post(VALID_EML, force="false")
+
+        assert response.status_code == 200
+        assert mock_classifier.call_count == 1
+
+    async def test_is_scoped_to_the_language(self, db_session, mock_classifier):
+        await _post(VALID_EML, language="en")
+        await _post(VALID_EML, language="uk")
+        assert mock_classifier.call_count == 2
+
+        # Forcing en must not touch the uk record.
+        await _post(VALID_EML, language="en", force="true")
+        assert mock_classifier.call_count == 3
+
+        cached_uk = await _post(VALID_EML, language="uk")
+        assert cached_uk.status_code == 200
+        assert mock_classifier.call_count == 3
 
 
 class TestGetClassify:

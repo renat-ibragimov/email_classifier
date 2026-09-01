@@ -17,6 +17,7 @@ class ClassificationService:
         self,
         content: bytes,
         language: LanguageEnum = LanguageEnum.EN,
+        force: bool = False,
     ) -> tuple[ClassificationRecord, bool]:
         """Classify email content. Returns existing record if duplicate.
 
@@ -30,6 +31,8 @@ class ClassificationService:
         Args:
             content: Raw .eml file bytes.
             language: Language for the reasoning and signals.
+            force: Re-run the LLM and overwrite the stored record even on a
+                cache hit. The record keeps its id and created_at.
 
         Returns:
             Tuple of (record, is_new). is_new=False means duplicate.
@@ -43,9 +46,10 @@ class ClassificationService:
 
         existing = await self.repo.find_by_hash(content_hash)
         if existing:
-            if existing.status == ClassificationStatusEnum.CLASSIFIED:
+            if existing.status == ClassificationStatusEnum.CLASSIFIED and not force:
                 return existing, False
-            # Re-classify pending or failed records (no commit needed; SELECT-only tx).
+            # Re-classify pending, failed, or force-refreshed records
+            # (no commit needed; SELECT-only tx).
             return await self._run_llm_classification(existing, parsed, language), False
 
         # Insert + commit PENDING immediately to release the unique-index lock
@@ -53,7 +57,7 @@ class ClassificationService:
         record, is_new = await self.repo.create(content_hash, language)
         await self.repo.save()
 
-        if not is_new and record.status == ClassificationStatusEnum.CLASSIFIED:
+        if not is_new and record.status == ClassificationStatusEnum.CLASSIFIED and not force:
             return record, False
 
         return await self._run_llm_classification(record, parsed, language), is_new

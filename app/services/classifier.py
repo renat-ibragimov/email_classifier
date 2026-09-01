@@ -16,13 +16,82 @@ from app.helpers.enums import EmailCategoryEnum, LanguageEnum
 
 logger = logging.getLogger(__name__)
 
-UKRAINIAN_HINT = " Written in Ukrainian."
+# Substrings that force the second-pass review regardless of first-pass confidence.
+# Matched case-insensitively against subject + body. Kept deliberately small and
+# blunt: the point is to spend a second call on the topics where a confidently
+# wrong "personal" or "transactional" verdict is most expensive.
+HIGH_RISK_CUES = (
+    "password",
+    "passcode",
+    "verify your account",
+    "login",
+    "sign in",
+    "portal",
+    "reset",
+    "update your",
+    "deadline",
+    "expires",
+    "urgent",
+    "immediately",
+    "suspended",
+)
 
-# Share of alphabetic characters that must be Cyrillic for the text to pass as Ukrainian.
-CYRILLIC_MIN_RATIO = 0.5
-CYRILLIC_RANGE = ("\u0400", "\u04ff")  # Cyrillic block; includes the Ukrainian-only letters
+CLASSIFY_TOOL = ChatCompletionToolParam(
+    type="function",
+    function={
+        "name": "classify_email",
+        "description": "Classify an email into a category with confidence score, reasoning, and signals.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "type": "string",
+                    "enum": [e.value for e in EmailCategoryEnum],
+                    "description": "Email category.",
+                },
+                "confidence": {
+                    "type": "number",
+                    "minimum": 0.0,
+                    "maximum": 1.0,
+                    "description": "Confidence score from 0.0 to 1.0.",
+                },
+                "reasoning": {
+                    "type": "string",
+                    "description": "Explanation of why this category was chosen.",
+                },
+                "signals": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Specific signals in the email that support the classification.",
+                },
+            },
+            "required": ["category", "confidence", "reasoning", "signals"],
+        },
+    },
+)
 
-RETRY_USER_LINE = "Respond in Ukrainian only."
+TRANSLATE_TOOL = ChatCompletionToolParam(
+    type="function",
+    function={
+        "name": "translate_result",
+        "description": "Return the Ukrainian translation of a classification reasoning and its signals.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "reasoning": {
+                    "type": "string",
+                    "description": "The reasoning translated into Ukrainian.",
+                },
+                "signals": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "The signals translated into Ukrainian, same count and same order as the input.",
+                },
+            },
+            "required": ["reasoning", "signals"],
+        },
+    },
+)
 
 SYSTEM_PROMPT = (
     "You are an email security classifier. "
@@ -33,77 +102,26 @@ SYSTEM_PROMPT = (
 
 REVIEW_PROMPT = (
     "You are a senior email security analyst performing a second review. "
-    "The initial classification was uncertain. Be extra critical. "
+    "Be extra critical. "
     "Look for subtle signs of spam and phishing: "
     "affiliate/referral links disguised as personal recommendations, "
     "product promotions embedded in casual conversation, "
     "password reset links from external domains mimicking internal IT, "
     "urgency disguised as routine maintenance deadlines. "
+    "If the email mentions credentials, logins, account verification, portals, or deadlines, "
+    "actively challenge any benign verdict: state what would have to be true for it to be safe, "
+    "and only keep a benign category once that holds. "
     "Classify the email using the classify_email tool."
 )
 
-# Leads the system prompt rather than trailing it: models weigh the opening
-# sentence far more reliably than an instruction buried after the task.
-UKRAINIAN_INSTRUCTION = (
-    "WRITE YOUR ANSWER IN UKRAINIAN. "
-    "The `reasoning` field and every item of the `signals` array MUST be written in Ukrainian, "
-    "never in English or any other language. "
-    "The `category` value is the only exception: it stays one of the English enum values "
-    "listed in the tool schema. "
+TRANSLATE_PROMPT = (
+    "You are a professional translator working on email security reports. "
+    "Translate the reasoning and every signal into Ukrainian using the translate_result tool. "
+    "Write natural, professional Ukrainian. "
+    "Leave technical terms, product names, domain names, URLs, email addresses and header names "
+    "exactly as they are — do not transliterate or translate them. "
+    "Return exactly as many signals as you were given, in the same order, one translation per signal."
 )
-
-
-def build_classify_tool(language: LanguageEnum) -> ChatCompletionToolParam:
-    """Build the classify_email tool schema for the requested output language.
-
-    The schema is rebuilt per request so the Ukrainian requirement is repeated in
-    the field descriptions the model reads while filling the tool call in.
-
-    Args:
-        language: Language the LLM-written fields should be produced in.
-
-    Returns:
-        Tool parameter with language-specific field descriptions.
-
-    """
-    hint = UKRAINIAN_HINT if language is LanguageEnum.UK else ""
-
-    return ChatCompletionToolParam(
-        type="function",
-        function={
-            "name": "classify_email",
-            "description": "Classify an email into a category with confidence score, reasoning, and signals.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "category": {
-                        "type": "string",
-                        "enum": [e.value for e in EmailCategoryEnum],
-                        "description": "Email category.",
-                    },
-                    "confidence": {
-                        "type": "number",
-                        "minimum": 0.0,
-                        "maximum": 1.0,
-                        "description": "Confidence score from 0.0 to 1.0.",
-                    },
-                    "reasoning": {
-                        "type": "string",
-                        "description": "Explanation of why this category was chosen." + hint,
-                    },
-                    "signals": {
-                        "type": "array",
-                        "items": {
-                            "type": "string",
-                            "description": "A signal supporting the classification." + hint,
-                        },
-                        "description": "Specific signals in the email that support the classification.",
-                    },
-                },
-                "required": ["category", "confidence", "reasoning", "signals"],
-            },
-        },
-    )
 
 
 @lru_cache(maxsize=1)
@@ -120,55 +138,18 @@ def get_client() -> AsyncOpenAI:
     return AsyncOpenAI(api_key=settings.openai_api_key)
 
 
-def cyrillic_ratio(text: str) -> float:
-    """Return the share of alphabetic characters in text that are Cyrillic.
+def has_high_risk_cues(email: ParsedEmail) -> bool:
+    """Check whether the email touches a topic that always deserves a second opinion.
 
     Args:
-        text: Text to measure.
+        email: Parsed email DTO.
 
     Returns:
-        Ratio from 0.0 to 1.0; 0.0 when the text has no alphabetic characters.
+        True if subject or body contains any HIGH_RISK_CUES substring.
 
     """
-    letters = [char for char in text if char.isalpha()]
-    if not letters:
-        return 0.0
-
-    low, high = CYRILLIC_RANGE
-    cyrillic = sum(1 for char in letters if low <= char <= high)
-    return cyrillic / len(letters)
-
-
-def is_ukrainian(text: str) -> bool:
-    """Check whether text reads as Ukrainian rather than English.
-
-    A ratio test on the alphabet is enough here: the alternative the model falls
-    back to is English, so any Latin-heavy answer is a miss.
-
-    Args:
-        text: Text to check.
-
-    Returns:
-        True if at least CYRILLIC_MIN_RATIO of its letters are Cyrillic.
-
-    """
-    return cyrillic_ratio(text) >= CYRILLIC_MIN_RATIO
-
-
-def _system_prompt(base_prompt: str, language: LanguageEnum) -> str:
-    """Return the system prompt adjusted for the requested output language.
-
-    Args:
-        base_prompt: Prompt for the pass being run (first or review).
-        language: Language the LLM-written fields should be produced in.
-
-    Returns:
-        The prompt as-is for English, or led by the Ukrainian instruction.
-
-    """
-    if language is LanguageEnum.UK:
-        return UKRAINIAN_INSTRUCTION + base_prompt
-    return base_prompt
+    haystack = f"{email.subject}\n{email.body}".lower()
+    return any(cue in haystack for cue in HIGH_RISK_CUES)
 
 
 def _build_user_message(email: ParsedEmail) -> str:
@@ -184,13 +165,13 @@ def _build_user_message(email: ParsedEmail) -> str:
     return f"From: {email.sender}\nTo: {email.to}\nSubject: {email.subject}\nDate: {email.date}\n\n{email.body}"
 
 
-async def _call_openai(user_message: str, system_prompt: str, language: LanguageEnum) -> dict:
-    """Make a single classification call to OpenAI with tool use.
+async def _call_tool(user_message: str, system_prompt: str, tool: ChatCompletionToolParam) -> dict:
+    """Make a single forced-tool-use call to OpenAI.
 
     Args:
-        user_message: Formatted email content.
-        system_prompt: System prompt for the LLM.
-        language: Language the tool schema is built for.
+        user_message: User-role content for the call.
+        system_prompt: System prompt for the call.
+        tool: Tool the model is forced to call.
 
     Returns:
         Parsed tool call arguments as dict.
@@ -201,14 +182,15 @@ async def _call_openai(user_message: str, system_prompt: str, language: Language
     """
     response = await get_client().chat.completions.create(
         model=settings.openai_model,
+        temperature=0,
         messages=[
             ChatCompletionSystemMessageParam(role="system", content=system_prompt),
             ChatCompletionUserMessageParam(role="user", content=user_message),
         ],
-        tools=[build_classify_tool(language)],
+        tools=[tool],
         tool_choice=ChatCompletionNamedToolChoiceParam(
             type="function",
-            function={"name": "classify_email"},
+            function={"name": tool["function"]["name"]},
         ),
     )
 
@@ -219,34 +201,55 @@ async def _call_openai(user_message: str, system_prompt: str, language: Language
     return json.loads(tool_calls[0].function.arguments)
 
 
-async def _call_in_language(user_message: str, system_prompt: str, language: LanguageEnum) -> dict:
-    """Run one classification pass, retrying once if the answer ignored the language.
-
-    A miss is not an error: a stray English reasoning is still a usable
-    classification, so the second answer is returned either way and only logged
-    when it fails too.
+async def _call_openai(user_message: str, system_prompt: str) -> dict:
+    """Make a single classification call to OpenAI with tool use.
 
     Args:
         user_message: Formatted email content.
-        system_prompt: System prompt for the pass being run.
-        language: Language the LLM-written fields should be produced in.
+        system_prompt: System prompt for the LLM.
 
     Returns:
         Parsed tool call arguments as dict.
 
     """
-    result = await _call_openai(user_message, system_prompt, language)
+    return await _call_tool(user_message, system_prompt, CLASSIFY_TOOL)
 
-    if language is not LanguageEnum.UK or is_ukrainian(result.get("reasoning", "")):
-        return result
 
-    logger.warning("LLM answered in the wrong language; retrying once with an explicit instruction")
-    result = await _call_openai(f"{user_message}\n\n{RETRY_USER_LINE}", system_prompt, language)
+async def translate_result(reasoning: str, signals: list[str]) -> tuple[str, list[str]]:
+    """Translate an English classification result into Ukrainian.
 
-    if not is_ukrainian(result.get("reasoning", "")):
-        logger.warning("LLM still did not answer in Ukrainian after the retry; keeping the response as-is")
+    Runs after the analysis is final, so a translation problem can never change
+    the verdict: any failure returns the English text untouched.
 
-    return result
+    Args:
+        reasoning: English reasoning from the analysis.
+        signals: English signals from the analysis.
+
+    Returns:
+        Tuple of (reasoning, signals) in Ukrainian, or the English input if the
+        call failed or came back in a shape that does not match the input.
+
+    """
+    if not reasoning and not signals:
+        return reasoning, signals
+
+    payload = json.dumps({"reasoning": reasoning, "signals": signals}, ensure_ascii=False)
+
+    # Deliberately broad: a failed translation must never fail the classification.
+    try:
+        translated = await _call_tool(payload, TRANSLATE_PROMPT, TRANSLATE_TOOL)
+    except Exception:
+        logger.warning("Translation call failed; keeping the English text", exc_info=True)
+        return reasoning, signals
+
+    translated_reasoning = translated.get("reasoning") or ""
+    translated_signals = translated.get("signals") or []
+
+    if not translated_reasoning or len(translated_signals) != len(signals):
+        logger.warning("Translation did not match the source shape; keeping the English text")
+        return reasoning, signals
+
+    return translated_reasoning, translated_signals
 
 
 async def classify_email(
@@ -255,7 +258,12 @@ async def classify_email(
 ) -> ClassificationResult:
     """Classify an email using OpenAI tool use.
 
-    Performs a second pass with stricter analysis if confidence is below threshold.
+    The analysis always runs in English so the verdict does not depend on the
+    requested output language; Ukrainian output is a separate translation step
+    applied to the finished result.
+
+    A second, stricter pass runs when the first pass is not confident, and
+    unconditionally when the email touches a high-risk topic.
 
     Args:
         parsed_email: Parsed email DTO.
@@ -267,17 +275,24 @@ async def classify_email(
     """
     user_message = _build_user_message(parsed_email)
 
-    result = await _call_in_language(user_message, _system_prompt(SYSTEM_PROMPT, language), language)
+    result = await _call_openai(user_message, SYSTEM_PROMPT)
     reviewed = False
 
-    if result.get("confidence", 0) <= settings.confidence_threshold:
-        result = await _call_in_language(user_message, _system_prompt(REVIEW_PROMPT, language), language)
+    low_confidence = result.get("confidence", 0) <= settings.confidence_threshold
+    if low_confidence or has_high_risk_cues(parsed_email):
+        result = await _call_openai(user_message, REVIEW_PROMPT)
         reviewed = True
+
+    reasoning = result.get("reasoning", "")
+    signals = result.get("signals", [])
+
+    if language is LanguageEnum.UK:
+        reasoning, signals = await translate_result(reasoning, signals)
 
     return ClassificationResult(
         category=EmailCategoryEnum(result.get("category", "")),
         confidence=result.get("confidence", 0.0),
-        reasoning=result.get("reasoning", ""),
-        signals=result.get("signals", []),
+        reasoning=reasoning,
+        signals=signals,
         reviewed=reviewed,
     )
