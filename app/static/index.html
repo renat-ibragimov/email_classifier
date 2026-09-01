@@ -145,6 +145,13 @@ a { color: var(--ink); }
   color: var(--muted);
 }
 
+.hero-steps {
+  margin: 14px 0 0;
+  font-size: 11px;
+  letter-spacing: .04em;
+  color: var(--ink-soft);
+}
+
 /* ---------- columns ---------- */
 
 .columns {
@@ -312,6 +319,16 @@ textarea::placeholder { color: var(--muted); }
 
 .sample:hover:not(:disabled) { border-color: var(--ink); background: rgba(20, 33, 61, .04); }
 .sample:disabled { opacity: .45; cursor: default; }
+
+.sample.primary {
+  color: #fff;
+  background: var(--ink);
+  border-color: var(--ink);
+}
+
+.sample.primary:hover:not(:disabled) { background: var(--ink); opacity: .85; }
+
+.sample-hint { margin: 0 0 8px; font-size: 11px; color: var(--muted); }
 
 /* ---------- envelope ---------- */
 
@@ -644,8 +661,9 @@ textarea::placeholder { color: var(--muted); }
 <main class="shell">
 
   <section class="hero">
-    <h1 class="hero-title" id="hero">Understand every email.</h1>
-    <p class="hero-lede" id="lede">Upload an .eml file and a language model sorts it into one of six categories.</p>
+    <h1 class="hero-title" id="hero">Is this email safe?</h1>
+    <p class="hero-lede" id="lede">Drop in a suspicious email and get a verdict in seconds: phishing, spam or legitimate — with a plain-language explanation of what gave it away.</p>
+    <p class="hero-steps" id="hero-steps">1. Upload an .eml or paste the text · 2. Get a verdict · 3. See the reasons</p>
   </section>
 
   <div class="columns">
@@ -676,6 +694,7 @@ textarea::placeholder { color: var(--muted); }
 
       <div class="samples">
         <p class="block-title" id="samples-label">Try a sample</p>
+        <p class="sample-hint" id="sample-hint">Not sure where to start? Try this one →</p>
         <div class="sample-row" id="sample-row" role="group" aria-labelledby="samples-label"></div>
       </div>
 
@@ -724,8 +743,9 @@ textarea::placeholder { color: var(--muted); }
       docTitle: "Email Classifier",
       brandTitle: "Email Classifier",
       langAria: "Language",
-      hero: "Understand every email.",
-      lede: "Upload an .eml file and a language model sorts it into one of six categories.",
+      hero: "Is this email safe?",
+      lede: "Drop in a suspicious email and get a verdict in seconds: phishing, spam or legitimate — with a plain-language explanation of what gave it away.",
+      heroSteps: "1. Upload an .eml or paste the text · 2. Get a verdict · 3. See the reasons",
       dropOverlay: "Drop the .eml file to classify",
       titleInput: "1. Input",
       titleResult: "2. Result",
@@ -738,6 +758,7 @@ textarea::placeholder { color: var(--muted); }
       pastePlaceholder: "Paste the email here.\n\nYou can include headers:\nFrom: someone@example.com\nSubject: Invoice overdue\n\n...or just the body text on its own.",
       pasteHint: "Missing From / Subject headers are filled in with placeholders before the .eml is sent.",
       samplesTitle: "Try a sample",
+      sampleHint: "Not sure where to start? Try this one →",
       envelopeTitle: "Envelope",
       envFrom: "From",
       envTo: "To",
@@ -786,8 +807,9 @@ textarea::placeholder { color: var(--muted); }
       docTitle: "Класифікатор листів",
       brandTitle: "Класифікатор листів",
       langAria: "Мова",
-      hero: "Зрозумій кожен лист.",
-      lede: "Завантажте .eml файл — мовна модель віднесе його до однієї з шести категорій.",
+      hero: "Цей лист безпечний?",
+      lede: "Завантажте підозрілий лист і за кілька секунд отримайте вердикт: фішинг, спам чи легітимний — з поясненням простою мовою, що саме викликало підозру.",
+      heroSteps: "1. Завантажте .eml або вставте текст · 2. Отримайте вердикт · 3. Подивіться причини",
       dropOverlay: "Відпустіть .eml файл для класифікації",
       titleInput: "1. Вхідні дані",
       titleResult: "2. Результат",
@@ -800,6 +822,7 @@ textarea::placeholder { color: var(--muted); }
       pastePlaceholder: "Вставте лист сюди.\n\nМожна разом із заголовками:\nFrom: someone@example.com\nSubject: Рахунок прострочено\n\n...або лише текст листа.",
       pasteHint: "Відсутні заголовки From / Subject буде замінено заглушками перед надсиланням .eml.",
       samplesTitle: "Спробуйте зразок",
+      sampleHint: "Не знаєте, з чого почати? Спробуйте цей →",
       envelopeTitle: "Конверт",
       envFrom: "Від",
       envTo: "Кому",
@@ -884,6 +907,9 @@ textarea::placeholder { color: var(--muted); }
 
   /* The verdict is a client-side reading of the category, not a field the API returns. */
   var FLAGGED_CATEGORIES = { phishing: true, spam: true };
+
+  /* The sample the hint points at: it leads the row and is the only filled button. */
+  var PRIMARY_SAMPLE = "hard_p.eml";
 
   /* Server-side 422 details are English; map the known ones onto dictionary keys. */
   var DETAIL_KEYS = {
@@ -1093,10 +1119,12 @@ textarea::placeholder { color: var(--muted); }
     setText("brand-title", t("brandTitle"));
     setText("hero", t("hero"));
     setText("lede", t("lede"));
+    setText("hero-steps", t("heroSteps"));
     setText("drop-overlay", t("dropOverlay"));
     setText("title-input", t("titleInput"));
     setText("title-result", t("titleResult"));
     setText("samples-label", t("samplesTitle"));
+    setText("sample-hint", t("sampleHint"));
     setText("paste-hint", t("pasteHint"));
     setText("actions-note", t("actionsNote"));
     setText("footer-source", t("footerSource"));
@@ -1492,8 +1520,13 @@ textarea::placeholder { color: var(--muted); }
       return;
     }
 
-    samples.forEach(function (sample) {
-      var button = el("button", "sample", localized(sample.label));
+    var ordered = samples.slice().sort(function (a, b) {
+      return (b.filename === PRIMARY_SAMPLE) - (a.filename === PRIMARY_SAMPLE);
+    });
+
+    ordered.forEach(function (sample) {
+      var isPrimary = sample.filename === PRIMARY_SAMPLE;
+      var button = el("button", "sample" + (isPrimary ? " primary" : ""), localized(sample.label));
       button.type = "button";
       button.title = localized(sample.description);
       button.disabled = busy;
