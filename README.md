@@ -11,7 +11,7 @@ Each email is assigned one of six categories (**spam**, **phishing**, **newslett
 - `POST /classify/` - upload an `.eml` file and get a classification back
 - `GET /classify/{id}/` - fetch a previously classified record by ID
 - `GET /health` - liveness probe, returns `{"status": "ok"}`
-- **Demo frontend** at `/` - a single static page (no build step, no framework) to upload an `.eml`, paste raw email text, or classify one of the bundled samples
+- **Demo frontend** at `/` - a single static page (no build step, no framework) to upload an `.eml`, paste raw email text, or classify one of the bundled samples. It parses the headers client-side into an ENVELOPE preview before sending, and reads the category into a FLAGGED / CLEAR verdict of its own
 - **Rate limiting** on `POST /classify/`: 10 requests per minute per client IP (in-memory, via `slowapi`), keyed off `X-Forwarded-For` so it works behind a reverse proxy
 - **Deduplication** by SHA-256 of raw `.eml` bytes plus the requested language; the same file uploaded twice in the same language returns the cached result with `200` instead of re-running the LLM
 - **Two-pass classification**: a stricter "senior analyst" review runs when first-pass confidence is below the threshold (`reviewed=true` in the response)
@@ -184,6 +184,7 @@ app/
 - **Re-classification on non-terminal status.** Records in `PENDING` or `FAILED` are re-classified on a subsequent upload; only `CLASSIFIED` is treated as a terminal hit.
 - **HTML body is kept.** `_extract_body` flattens `text/plain` then `text/html` parts because phishing signals (suspicious links, hidden URLs) often live in the HTML.
 - **The demo entrypoints are uncached.** `/` and `/static/samples/samples.json` are served with `Cache-Control: no-cache` (the manifest via an explicit route declared *before* the `/static` mount, so it wins the match), and the page fetches the manifest with `cache: "no-store"`. Without it, a redeploy showed up only after a hard refresh. The `.eml` samples never change, so they stay cacheable.
+- **The verdict is the frontend's own reading.** `FLAGGED` / `CLEAR` is derived in the browser from `category` (phishing and spam are flagged); the API has no verdict field and stays the single source of the category itself.
 - **Enums are PostgreSQL-native.** `classification_status` and `email_category` are `CREATE TYPE` enums, owned by the Alembic migration. SQLAlchemy column definitions use `create_type=False` — the migration is the single source of truth.
 
 ## Development workflow

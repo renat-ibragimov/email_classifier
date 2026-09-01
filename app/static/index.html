@@ -6,7 +6,7 @@
 <title>Email Classifier</title>
 <meta name="description" content="Upload an .eml file and see how an LLM classifies it: category, confidence, reasoning and signals.">
 <script>
-/* Resolve the language before the sheet is parsed so <html lang> and the first
+/* Resolve the language before the page is parsed so <html lang> and the first
    paint already agree with the stored choice. */
 (function () {
   var stored = null;
@@ -20,51 +20,28 @@
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Playfair+Display:wght@500;600&display=swap" rel="stylesheet">
 <style>
 :root {
-  --paper:        #f4f1ea;
-  --sheet:        #fbfaf6;
-  --ink:          #1c1f26;
-  --ink-blue:     #1f3a8a;
-  --muted:        #79746a;
-  --rule:         #d8d3c5;
-  --rule-strong:  #b9b3a3;
+  --bg:          #f2f1ee;
+  --panel:       #ffffff;
+  --ink:         #14213d;
+  --ink-soft:    #38415a;
+  --muted:       #6f7480;
+  --line:        #d7d6d1;
+  --line-strong: #b4b3ad;
 
-  --cat-phishing:      #b4232a;
-  --cat-spam:          #b5621b;
-  --cat-newsletter:    #1f5fa8;
-  --cat-transactional: #10706b;
-  --cat-personal:      #2c7a3f;
-  --cat-automated:     #5c6270;
+  --red:   #b3261e;
+  --green: #2e6b3a;
 
-  --mono: "IBM Plex Mono", "Courier Prime", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
-  --display: "Playfair Display", "Libre Baskerville", Georgia, "Times New Roman", serif;
+  --cat-phishing:      #b3261e;
+  --cat-spam:          #a3431a;
+  --cat-newsletter:    #14213d;
+  --cat-transactional: #1c5c66;
+  --cat-personal:      #2e6b3a;
+  --cat-automated:     #5a6270;
+
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --serif: "Playfair Display", Georgia, "Times New Roman", serif;
 
   --t: 120ms ease;
-
-  /* Deckle / torn bottom edge of the sheet. */
-  --torn: polygon(
-    0 0, 100% 0,
-    100% calc(100% - 9px),
-    95%  calc(100% - 3px),
-    90%  calc(100% - 11px),
-    85%  calc(100% - 5px),
-    80%  calc(100% - 13px),
-    75%  calc(100% - 4px),
-    70%  calc(100% - 8px),
-    65%  calc(100% - 2px),
-    60%  calc(100% - 12px),
-    55%  calc(100% - 6px),
-    50%  calc(100% - 10px),
-    45%  calc(100% - 3px),
-    40%  calc(100% - 14px),
-    35%  calc(100% - 5px),
-    30%  calc(100% - 7px),
-    25%  calc(100% - 11px),
-    20%  calc(100% - 4px),
-    15%  calc(100% - 9px),
-    10%  calc(100% - 2px),
-    5%   calc(100% - 10px),
-    0    calc(100% - 6px)
-  );
 }
 
 * { box-sizing: border-box; }
@@ -73,26 +50,15 @@ html { -webkit-text-size-adjust: 100%; }
 
 body {
   margin: 0;
-  background: var(--paper);
+  background: var(--bg);
   color: var(--ink);
   font-family: var(--mono);
-  font-size: 14px;
-  line-height: 1.65;
+  font-size: 13px;
+  line-height: 1.6;
   font-variant-ligatures: none;
 }
 
-/* Paper grain: one inline SVG turbulence tile, no image files. */
-.grain {
-  position: fixed;
-  inset: 0;
-  z-index: 90;
-  pointer-events: none;
-  opacity: .30;
-  mix-blend-mode: multiply;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23g)' opacity='0.55'/%3E%3C/svg%3E");
-}
-
-a { color: var(--ink-blue); }
+a { color: var(--ink); }
 
 .sr-only {
   position: absolute;
@@ -104,40 +70,36 @@ a { color: var(--ink-blue); }
   border: 0;
 }
 
-/* ---------- layout ---------- */
+/* ---------- masthead ---------- */
 
-.layout {
-  max-width: 1180px;
-  margin: 0 auto;
-  padding: 64px 40px 80px;
-  display: grid;
-  grid-template-columns: 300px minmax(0, 1fr);
-  gap: 60px;
-  align-items: start;
-}
-
-.sidebar { position: sticky; top: 64px; }
-
-/* ---------- sidebar ---------- */
-
-.brand-row {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 16px;
-  padding-bottom: 10px;
+.masthead {
   border-bottom: 1px solid var(--ink);
+  background: var(--bg);
 }
 
-.brand-title {
+.masthead-inner,
+.shell,
+.footer-inner {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 0 28px;
+}
+
+.masthead-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  height: 52px;
+}
+
+.wordmark {
   margin: 0;
   font-size: 12px;
   font-weight: 600;
-  letter-spacing: .18em;
+  letter-spacing: .22em;
   text-transform: uppercase;
 }
-
-/* ---------- language switcher ---------- */
 
 .lang-switch { display: flex; align-items: baseline; gap: 7px; flex: none; }
 
@@ -150,151 +112,68 @@ a { color: var(--ink-blue); }
   font: inherit;
   font-size: 11px;
   font-weight: 500;
-  letter-spacing: .14em;
+  letter-spacing: .16em;
   color: var(--muted);
   cursor: pointer;
   transition: color var(--t), border-color var(--t);
 }
 
 .lang:hover { color: var(--ink); }
-.lang[aria-pressed="true"] { color: var(--ink-blue); border-bottom-color: var(--ink-blue); }
-.lang:focus-visible { outline: 1px solid var(--ink-blue); outline-offset: 3px; }
+.lang[aria-pressed="true"] { color: var(--ink); border-bottom-color: var(--ink); }
+.lang:focus-visible { outline: 1px solid var(--ink); outline-offset: 3px; }
 
-.lang-sep { font-size: 11px; color: var(--rule-strong); user-select: none; }
+.lang-sep { font-size: 11px; color: var(--line-strong); user-select: none; }
 
-.brand-tag {
-  display: inline-block;
-  margin-top: 12px;
-  font-size: 10px;
-  letter-spacing: .16em;
-  text-transform: uppercase;
-  color: var(--ink-blue);
-  border: 1px solid var(--ink-blue);
-  border-radius: 2px;
-  padding: 2px 7px;
-}
+/* ---------- hero ---------- */
 
-.hero {
-  font-family: var(--display);
-  font-weight: 500;
-  font-size: 46px;
-  line-height: 1.08;
-  letter-spacing: -.01em;
-  margin: 26px 0 0;
-}
+.shell { padding-top: 44px; padding-bottom: 56px; }
 
-.hero-rule {
-  width: 54px;
-  height: 2px;
-  background: var(--ink-blue);
-  margin: 20px 0 18px;
-}
+.hero { max-width: 640px; margin: 0 0 36px; }
 
-.lede {
+.hero-title {
   margin: 0;
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 42px;
+  line-height: 1.1;
+  letter-spacing: -.01em;
+}
+
+.hero-lede {
+  margin: 14px 0 0;
   font-size: 13px;
-  line-height: 1.7;
   color: var(--muted);
 }
 
-.demo-block { margin-top: 44px; }
+/* ---------- columns ---------- */
 
-.demo-stack {
-  margin: 10px 0 16px;
-  font-size: 13px;
-  color: var(--ink);
+.columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
 }
 
-.ghost-btn {
-  display: inline-block;
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: .14em;
-  text-transform: uppercase;
-  text-decoration: none;
-  color: var(--ink-blue);
-  border: 1px solid var(--ink-blue);
-  border-radius: 2px;
-  padding: 9px 14px;
-  transition: background var(--t), color var(--t);
+@media (min-width: 1000px) {
+  .columns { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
 }
 
-.ghost-btn:hover { background: var(--ink-blue); color: var(--sheet); }
-
-/* ---------- the sheet ---------- */
-
-.sheet {
+.panel {
   position: relative;
-  padding: 44px 44px 52px;
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  padding: 20px;
 }
 
-/* Paper face, clipped to the torn edge. */
-.sheet::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  background: var(--sheet);
-  border: 1px solid var(--rule);
-  clip-path: var(--torn);
-}
-
-/* Faint offset sheet underneath, standing in for a shadow that clip-path would eat. */
-.sheet::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  transform: translateY(4px);
-  background: rgba(28, 31, 38, .09);
-  clip-path: var(--torn);
-}
-
-.sheet > * { position: relative; z-index: 1; }
-
-.drop-overlay {
-  position: absolute;
-  inset: 6px;
-  z-index: 5;
-  display: none;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  letter-spacing: .16em;
-  text-transform: uppercase;
-  color: var(--ink-blue);
-  background: rgba(251, 250, 246, .94);
-  border: 1px dashed var(--ink-blue);
-  border-radius: 2px;
-}
-
-.sheet.dragover .drop-overlay { display: flex; }
-
-/* ---------- sections ---------- */
-
-.block { padding-top: 30px; }
-.block:first-of-type { padding-top: 0; }
-
-.block + .block { border-top: 1px solid var(--rule); margin-top: 30px; }
-
-.section-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 18px;
-}
-
-.section-title {
+.panel-title {
   margin: 0 0 18px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--ink);
   font-size: 11px;
   font-weight: 600;
-  letter-spacing: .18em;
+  letter-spacing: .2em;
   text-transform: uppercase;
-  color: var(--ink-blue);
 }
-
-.section-head .section-title { margin-bottom: 0; }
 
 .label {
   display: block;
@@ -302,34 +181,53 @@ a { color: var(--ink-blue); }
   font-weight: 500;
   letter-spacing: .16em;
   text-transform: uppercase;
-  color: var(--ink-blue);
+  color: var(--muted);
 }
+
+.drop-overlay {
+  position: absolute;
+  inset: 4px;
+  z-index: 5;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: var(--ink);
+  background: rgba(255, 255, 255, .95);
+  border: 1px dashed var(--ink);
+}
+
+.panel.dragover .drop-overlay { display: flex; }
 
 /* ---------- tabs ---------- */
 
 .tabs {
   display: flex;
-  gap: 26px;
-  border-bottom: 1px solid var(--rule);
-  margin-bottom: 22px;
+  border: 1px solid var(--line-strong);
+  margin-bottom: 18px;
 }
 
 .tab {
   appearance: none;
+  flex: 1;
   background: none;
   border: 0;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-  padding: 0 0 10px;
+  border-right: 1px solid var(--line-strong);
+  padding: 9px 10px;
   font: inherit;
-  font-size: 13px;
+  font-size: 11px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
   color: var(--muted);
   cursor: pointer;
-  transition: color var(--t), border-color var(--t);
+  transition: background var(--t), color var(--t);
 }
 
+.tab:last-child { border-right: 0; }
 .tab:hover { color: var(--ink); }
-.tab[aria-selected="true"] { color: var(--ink-blue); border-bottom-color: var(--ink-blue); }
+.tab[aria-selected="true"] { background: var(--ink); color: #fff; }
 
 /* ---------- drop zone ---------- */
 
@@ -337,32 +235,28 @@ a { color: var(--ink-blue); }
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
-  padding: 42px 20px;
+  gap: 8px;
+  padding: 34px 16px;
   text-align: center;
-  border: 1px dashed var(--rule-strong);
-  border-radius: 2px;
+  border: 1px dashed var(--line-strong);
   cursor: pointer;
   transition: border-color var(--t), background var(--t);
 }
 
 .filedrop:hover, .filedrop:focus-visible {
-  border-color: var(--ink-blue);
-  background: rgba(31, 58, 138, .03);
+  border-color: var(--ink);
+  background: rgba(20, 33, 61, .02);
   outline: none;
 }
 
-.filedrop svg { color: var(--rule-strong); }
-.filedrop:hover svg { color: var(--ink-blue); }
-
-.filedrop-main { font-size: 13px; color: var(--ink); }
-.filedrop-main u { text-decoration-color: var(--ink-blue); color: var(--ink-blue); }
+.filedrop-main { font-size: 12px; color: var(--ink-soft); }
+.filedrop-main u { text-decoration-color: var(--ink); color: var(--ink); }
 
 .filedrop-name {
-  font-size: 12px;
-  color: var(--ink-blue);
-  border-top: 1px solid var(--rule);
-  padding-top: 10px;
+  font-size: 11px;
+  color: var(--ink);
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
   word-break: break-all;
 }
 
@@ -370,22 +264,95 @@ a { color: var(--ink-blue); }
 
 textarea {
   width: 100%;
-  min-height: 190px;
+  min-height: 168px;
   resize: vertical;
-  padding: 14px;
+  padding: 12px;
   font: inherit;
-  font-size: 13px;
+  font-size: 12px;
   color: var(--ink);
-  background: var(--paper);
-  border: 1px solid var(--rule-strong);
-  border-radius: 2px;
+  background: var(--bg);
+  border: 1px solid var(--line-strong);
+  border-radius: 0;
   transition: border-color var(--t);
 }
 
-textarea:focus { outline: none; border-color: var(--ink-blue); }
+textarea:focus { outline: none; border-color: var(--ink); }
 textarea::placeholder { color: var(--muted); }
 
-.field-hint { margin: 10px 0 0; font-size: 12px; color: var(--muted); }
+.field-hint { margin: 10px 0 0; font-size: 11px; color: var(--muted); }
+
+/* ---------- samples ---------- */
+
+.samples { margin-top: 20px; }
+
+.block-title {
+  margin: 0 0 10px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.sample-row { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.sample {
+  appearance: none;
+  font: inherit;
+  font-size: 10px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--ink);
+  background: none;
+  border: 1px solid var(--line-strong);
+  padding: 6px 9px;
+  cursor: pointer;
+  transition: border-color var(--t), background var(--t);
+}
+
+.sample:hover:not(:disabled) { border-color: var(--ink); background: rgba(20, 33, 61, .04); }
+.sample:disabled { opacity: .45; cursor: default; }
+
+/* ---------- envelope ---------- */
+
+.envelope {
+  margin-top: 20px;
+  border: 1px solid var(--line);
+  padding: 14px;
+  background: var(--bg);
+}
+
+.env-table { margin: 0; display: grid; gap: 6px; }
+
+.env-row {
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr);
+  gap: 10px;
+  align-items: baseline;
+}
+
+.env-row dt {
+  font-size: 10px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.env-row dd {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.env-file {
+  margin: 12px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  font-size: 11px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
 
 /* ---------- action row ---------- */
 
@@ -393,54 +360,192 @@ textarea::placeholder { color: var(--muted); }
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 14px;
   margin-top: 20px;
 }
 
-.actions-note { font-size: 12px; color: var(--muted); }
+.actions-note { font-size: 11px; color: var(--muted); }
 
 .btn {
   appearance: none;
   font: inherit;
   font-size: 11px;
   font-weight: 500;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: #fff;
+  background: var(--ink);
+  border: 1px solid var(--ink);
+  padding: 10px 18px;
+  cursor: pointer;
+  transition: opacity var(--t);
+}
+
+.btn:hover:not(:disabled) { opacity: .85; }
+.btn:disabled { opacity: .45; cursor: default; }
+
+/* ---------- result: empty / loading / alerts ---------- */
+
+.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 16px;
+  text-align: center;
+  font-size: 11px;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border: 1px dashed var(--line-strong);
+}
+
+.loading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 34px 2px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.spinner {
+  flex: none;
+  width: 13px; height: 13px;
+  border: 1px solid var(--line-strong);
+  border-top-color: var(--ink);
+  border-radius: 50%;
+  animation: spin .9s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.alert { padding: 14px; border: 1px solid var(--line-strong); border-left: 3px solid var(--ink); }
+.alert.warn { border-left-color: var(--cat-spam); }
+.alert.error { border-left-color: var(--red); }
+
+.alert-title {
+  margin: 0 0 5px;
+  font-size: 11px;
+  font-weight: 600;
   letter-spacing: .14em;
   text-transform: uppercase;
-  color: var(--sheet);
-  background: var(--ink-blue);
-  border: 1px solid var(--ink-blue);
-  border-radius: 2px;
-  padding: 11px 18px;
-  cursor: pointer;
-  transition: background var(--t), color var(--t);
 }
 
-.btn:hover:not(:disabled) { background: var(--ink); border-color: var(--ink); }
-.btn:disabled { opacity: .5; cursor: default; }
+.alert-body { margin: 0; font-size: 12px; color: var(--muted); }
 
-/* ---------- samples ---------- */
+/* ---------- result ---------- */
 
-.sample-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.dup-note {
+  margin: 0 0 14px;
+  font-size: 10px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
 
-.sample {
-  appearance: none;
-  font: inherit;
-  font-size: 11px;
-  letter-spacing: .08em;
+.verdict {
+  display: block;
+  padding: 16px 18px;
+  border: 1px solid var(--verdict-color);
+  border-left-width: 5px;
+  color: var(--verdict-color);
+  font-size: clamp(20px, 3.6vw, 30px);
+  font-weight: 600;
+  letter-spacing: .16em;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+.verdict.clear { --verdict-color: var(--green); }
+.verdict.flagged { --verdict-color: var(--red); }
+
+.result-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 18px;
+  margin-top: 20px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+@media (min-width: 560px) {
+  .result-row { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 24px; }
+}
+
+.category-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0 0;
+}
+
+.category-name {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--cat-color, var(--ink));
+}
+
+.review-tag {
+  font-size: 9px;
+  letter-spacing: .14em;
   text-transform: uppercase;
   color: var(--ink);
-  background: none;
-  border: 1px solid var(--rule-strong);
-  border-radius: 2px;
-  padding: 7px 11px;
-  cursor: pointer;
-  transition: border-color var(--t), color var(--t);
+  border: 1px solid var(--ink);
+  padding: 3px 6px;
+  white-space: nowrap;
 }
 
-.sample:hover:not(:disabled) { border-color: var(--ink-blue); color: var(--ink-blue); }
-.sample:disabled { opacity: .45; cursor: default; }
+.confidence-value {
+  margin: 6px 0 0;
+  font-size: 24px;
+  font-weight: 500;
+  line-height: 1.1;
+}
 
-/* ---------- raw json toggle ---------- */
+.meter { height: 3px; background: var(--line); margin-top: 8px; }
+.meter-fill { height: 100%; background: var(--cat-color, var(--ink)); transition: width var(--t); }
+
+.result-section { margin-top: 20px; }
+.reasoning { margin: 8px 0 0; font-size: 12.5px; line-height: 1.7; color: var(--ink-soft); }
+
+.signals { list-style: none; margin: 6px 0 0; padding: 0; counter-reset: signal; }
+
+.signals li {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 10px;
+  padding: 9px 0;
+  font-size: 12.5px;
+  border-bottom: 1px solid var(--line);
+}
+
+.signals li::before {
+  counter-increment: signal;
+  content: counter(signal, decimal-leading-zero);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.signals.flagged li::before { color: var(--red); }
+
+.meta-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin-top: 22px;
+  padding-top: 12px;
+  border-top: 1px solid var(--ink);
+  font-size: 10px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.meta-sep { color: var(--line-strong); }
 
 .raw-toggle {
   appearance: none;
@@ -448,195 +553,55 @@ textarea::placeholder { color: var(--muted); }
   font-size: 10px;
   letter-spacing: .14em;
   text-transform: uppercase;
-  color: var(--ink-blue);
+  color: var(--ink);
   background: none;
-  border: 1px solid var(--rule-strong);
-  border-radius: 2px;
-  padding: 6px 10px;
+  border: 1px solid var(--line-strong);
+  padding: 4px 8px;
+  margin-left: auto;
   cursor: pointer;
   white-space: nowrap;
-  transition: border-color var(--t), opacity var(--t);
+  transition: border-color var(--t);
 }
 
-.raw-toggle:hover:not(:disabled) { border-color: var(--ink-blue); }
-.raw-toggle:disabled { opacity: .4; cursor: default; }
+.raw-toggle:hover { border-color: var(--ink); }
 
 .raw-json {
-  margin: 0 0 22px;
-  padding: 16px;
+  margin: 14px 0 0;
+  padding: 14px;
   overflow-x: auto;
-  font-size: 12px;
+  font-size: 11.5px;
   line-height: 1.6;
   color: var(--ink);
-  background: var(--paper);
-  border: 1px solid var(--rule);
-  border-radius: 2px;
+  background: var(--bg);
+  border: 1px solid var(--line);
 }
-
-/* ---------- placeholder / loading / alerts ---------- */
-
-.placeholder {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 54px 20px;
-  text-align: center;
-  font-size: 12px;
-  letter-spacing: .12em;
-  text-transform: uppercase;
-  color: var(--muted);
-  border: 1px dashed var(--rule);
-  border-radius: 2px;
-}
-
-.loading { display: flex; align-items: center; gap: 14px; padding: 40px 4px; font-size: 13px; color: var(--muted); }
-
-.spinner {
-  flex: none;
-  width: 15px; height: 15px;
-  border: 1px solid var(--rule-strong);
-  border-top-color: var(--ink-blue);
-  border-radius: 50%;
-  animation: spin .9s linear infinite;
-}
-
-@keyframes spin { to { transform: rotate(360deg); } }
-
-.alert { padding: 18px; border: 1px solid var(--rule-strong); border-left: 2px solid var(--ink); border-radius: 2px; }
-.alert.warn { border-left-color: var(--cat-spam); }
-.alert.error { border-left-color: var(--cat-phishing); }
-
-.alert-title {
-  margin: 0 0 6px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: .14em;
-  text-transform: uppercase;
-}
-
-.alert-body { margin: 0; font-size: 13px; color: var(--muted); }
-
-/* ---------- result ---------- */
-
-.note {
-  margin: 0 0 22px;
-  padding: 8px 12px;
-  font-size: 11px;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-  color: var(--ink-blue);
-  border: 1px dashed var(--ink-blue);
-  border-radius: 2px;
-}
-
-.result-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 190px;
-  gap: 40px;
-  align-items: start;
-}
-
-.stamp-area { display: flex; flex-wrap: wrap; align-items: center; gap: 18px; margin: 14px 0 32px; }
-
-/* Rubber stamp: double rule, rotated, worn by a cheap turbulence mask. */
-.stamp {
-  display: inline-block;
-  max-width: 100%;
-  padding: 10px 20px;
-  font-size: clamp(20px, 4.4vw, 34px);
-  font-weight: 600;
-  letter-spacing: .1em;
-  line-height: 1.1;
-  text-transform: uppercase;
-  color: var(--stamp-color, var(--cat-automated));
-  border: 2px solid currentColor;
-  border-radius: 2px;
-  box-shadow: inset 0 0 0 2px var(--sheet), inset 0 0 0 3px currentColor;
-  transform: rotate(-6deg);
-  overflow-wrap: anywhere;
-  opacity: .92;
-  -webkit-mask-image: var(--worn);
-  mask-image: var(--worn);
-  -webkit-mask-size: 220px 130px;
-  mask-size: 220px 130px;
-}
-
-.stamp.small {
-  font-size: clamp(10px, 1.8vw, 13px);
-  letter-spacing: .16em;
-  padding: 6px 12px;
-  border-width: 1px;
-  box-shadow: inset 0 0 0 2px var(--sheet), inset 0 0 0 3px currentColor;
-  transform: rotate(4deg);
-  color: var(--ink-blue);
-}
-
-.result-section { margin-top: 26px; }
-.reasoning { margin: 10px 0 0; font-size: 13px; line-height: 1.75; }
-
-.signals { list-style: none; margin: 6px 0 0; padding: 0; }
-
-.signals li {
-  position: relative;
-  padding: 10px 0 10px 20px;
-  font-size: 13px;
-  border-bottom: 1px solid var(--rule);
-}
-
-.signals li::before { content: "—"; position: absolute; left: 0; color: var(--ink-blue); }
-
-/* meta column */
-
-.meta { border-left: 1px solid var(--rule); padding-left: 26px; }
-.meta-item + .meta-item { margin-top: 24px; }
-.meta-value { margin: 6px 0 0; font-size: 13px; word-break: break-word; }
-
-.meta-confidence { margin: 4px 0 0; font-size: 32px; font-weight: 500; line-height: 1.1; }
-
-.meter { height: 2px; background: var(--rule); margin-top: 10px; }
-.meter-fill { height: 100%; background: var(--stamp-color, var(--ink-blue)); transition: width var(--t); }
 
 /* ---------- footer ---------- */
 
-.footer { margin-top: 26px; font-size: 12px; color: var(--muted); }
-.footer a { color: var(--ink-blue); }
+.footer { border-top: 1px solid var(--line-strong); }
+
+.footer-inner {
+  padding-top: 16px;
+  padding-bottom: 16px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.footer-inner a { color: var(--ink); }
 
 /* ---------- mobile ---------- */
 
 @media (max-width: 899px) {
-  .layout {
-    grid-template-columns: minmax(0, 1fr);
-    gap: 30px;
-    padding: 34px 18px 56px;
-  }
-
-  .sidebar { position: static; }
-
-  /* The sidebar collapses into a compact header here; keep the switcher on the
-     same line as the brand and give it a finger-sized hit area. */
-  .brand-row { padding-bottom: 8px; }
-  .lang-switch { gap: 9px; }
+  .masthead-inner, .shell, .footer-inner { padding-left: 16px; padding-right: 16px; }
+  .shell { padding-top: 30px; padding-bottom: 40px; }
+  .hero-title { font-size: 30px; }
+  .panel { padding: 16px; }
   .lang { font-size: 12px; padding: 4px 2px 3px; }
-
-  .hero { font-size: 32px; margin-top: 20px; }
-  .hero-rule { margin: 14px 0 12px; }
-  .lede-more { display: none; }
-  .demo-block { display: none; }
-
-  .sheet { padding: 26px 20px 42px; }
-
-  .tabs { gap: 0; }
-  .tab { flex: 1; text-align: center; padding-bottom: 12px; }
-
-  .actions { flex-direction: column; align-items: stretch; gap: 12px; }
+  .lang-switch { gap: 9px; }
+  .actions { flex-direction: column; align-items: stretch; gap: 10px; }
   .actions-note { order: 2; text-align: center; }
   .btn { order: 1; width: 100%; }
-
-  .result-grid { grid-template-columns: minmax(0, 1fr); gap: 28px; }
-  .meta { border-left: 0; border-top: 1px solid var(--rule); padding: 24px 0 0; }
-
-  .stamp-area { gap: 12px; margin-bottom: 24px; }
-  .stamp { padding: 8px 14px; letter-spacing: .06em; }
+  .env-row { grid-template-columns: 68px minmax(0, 1fr); }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -646,96 +611,86 @@ textarea::placeholder { color: var(--muted); }
 </head>
 <body>
 
-<div class="grain" aria-hidden="true"></div>
-
-<div class="layout">
-
-  <aside class="sidebar">
-    <div class="brand-row">
-      <p class="brand-title" id="brand-title">Email Classifier</p>
-      <div class="lang-switch" id="lang-switch" role="group" aria-label="Language">
-        <button class="lang" type="button" data-lang="en" aria-pressed="true">EN</button>
-        <span class="lang-sep" aria-hidden="true">|</span>
-        <button class="lang" type="button" data-lang="uk" aria-pressed="false">UK</button>
-      </div>
+<header class="masthead">
+  <div class="masthead-inner">
+    <p class="wordmark" id="brand-title">Email Classifier</p>
+    <div class="lang-switch" id="lang-switch" role="group" aria-label="Language">
+      <button class="lang" type="button" data-lang="en" aria-pressed="true">EN</button>
+      <span class="lang-sep" aria-hidden="true">|</span>
+      <button class="lang" type="button" data-lang="uk" aria-pressed="false">UK</button>
     </div>
-    <span class="brand-tag" id="brand-tag">LLM-powered</span>
+  </div>
+</header>
 
-    <h1 class="hero" id="hero">Understand every email.</h1>
-    <div class="hero-rule"></div>
-    <p class="lede"><span id="lede-main">Upload an .eml file and a language model sorts it into one of six categories.</span> <span class="lede-more" id="lede-more">Every verdict carries a confidence score, plain-language reasoning, and the signals it was built on.</span></p>
+<main class="shell">
 
-    <div class="demo-block">
-      <span class="label" id="demo-label">Demo project</span>
-      <p class="demo-stack">FastAPI · OpenAI</p>
-      <a class="ghost-btn" id="github-btn" href="https://github.com/renat-ibragimov/email_classifier" target="_blank" rel="noopener noreferrer">View on GitHub →</a>
-    </div>
-  </aside>
+  <section class="hero">
+    <h1 class="hero-title" id="hero">Understand every email.</h1>
+    <p class="hero-lede" id="lede">Upload an .eml file and a language model sorts it into one of six categories.</p>
+  </section>
 
-  <div class="main">
+  <div class="columns">
 
-    <section class="sheet" id="card">
+    <section class="panel" id="input-panel">
       <div class="drop-overlay" id="drop-overlay">Drop the .eml file to classify</div>
 
-      <section class="block">
-        <h2 class="section-title" id="title-input">1. Input</h2>
+      <h2 class="panel-title" id="title-input">1. Input</h2>
 
-        <div class="tabs" role="tablist" aria-label="Input mode">
-          <button class="tab" id="tab-upload" role="tab" aria-selected="true" aria-controls="panel-upload" type="button">Upload .eml file</button>
-          <button class="tab" id="tab-paste" role="tab" aria-selected="false" aria-controls="panel-paste" type="button">Paste email content</button>
+      <div class="tabs" role="tablist" aria-label="Input mode">
+        <button class="tab" id="tab-upload" role="tab" aria-selected="true" aria-controls="panel-upload" type="button">Upload .eml file</button>
+        <button class="tab" id="tab-paste" role="tab" aria-selected="false" aria-controls="panel-paste" type="button">Paste email content</button>
+      </div>
+
+      <div id="panel-upload" role="tabpanel" aria-labelledby="tab-upload">
+        <div class="filedrop" id="filedrop" tabindex="0" role="button" aria-label="Choose an .eml file">
+          <span class="filedrop-main" id="filedrop-main">Drag &amp; drop your .eml file here or <u id="filedrop-browse">browse</u></span>
+          <span class="filedrop-name" id="filename" hidden></span>
         </div>
+        <input type="file" id="fileinput" accept=".eml,message/rfc822">
+      </div>
 
-        <div class="panel" id="panel-upload" role="tabpanel" aria-labelledby="tab-upload">
-          <div class="filedrop" id="filedrop" tabindex="0" role="button" aria-label="Choose an .eml file">
-            <svg width="30" height="38" viewBox="0 0 30 38" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true">
-              <path d="M18.5 1H3.5A2.5 2.5 0 0 0 1 3.5v31A2.5 2.5 0 0 0 3.5 37h23a2.5 2.5 0 0 0 2.5-2.5V11.5L18.5 1Z"/>
-              <path d="M18.5 1v10.5H29"/>
-              <path d="M7 20h16M7 26h16M7 32h10"/>
-            </svg>
-            <span class="filedrop-main" id="filedrop-main">Drag &amp; drop your .eml file here or <u id="filedrop-browse">browse</u></span>
-            <span class="filedrop-name" id="filename" hidden></span>
-          </div>
-          <input type="file" id="fileinput" accept=".eml,message/rfc822">
-        </div>
+      <div id="panel-paste" role="tabpanel" aria-labelledby="tab-paste" hidden>
+        <label class="sr-only" for="pastebox">Email text</label>
+        <textarea id="pastebox" spellcheck="false"></textarea>
+        <p class="field-hint" id="paste-hint">Missing From / Subject headers are filled in with placeholders before the .eml is sent.</p>
+      </div>
 
-        <div class="panel" id="panel-paste" role="tabpanel" aria-labelledby="tab-paste" hidden>
-          <label class="sr-only" for="pastebox">Email text</label>
-          <textarea id="pastebox" spellcheck="false" placeholder="Paste the email here.
-
-You can include headers:
-From: someone@example.com
-Subject: Invoice overdue
-
-...or just the body text on its own."></textarea>
-          <p class="field-hint" id="paste-hint">Missing From / Subject headers are filled in with placeholders before the .eml is sent.</p>
-        </div>
-
-        <div class="actions">
-          <span class="actions-note" id="actions-note">Max file size: 10 MB</span>
-          <button class="btn" id="submit" type="button">Classify email →</button>
-        </div>
-      </section>
-
-      <section class="block">
-        <h2 class="section-title" id="samples-label">Try a sample</h2>
+      <div class="samples">
+        <p class="block-title" id="samples-label">Try a sample</p>
         <div class="sample-row" id="sample-row" role="group" aria-labelledby="samples-label"></div>
-      </section>
+      </div>
 
-      <section class="block">
-        <div class="section-head">
-          <h2 class="section-title" id="title-result">2. Result</h2>
-          <button class="raw-toggle" id="raw-toggle" type="button" aria-expanded="false" aria-controls="raw-json" disabled>View raw JSON { }</button>
-        </div>
-        <pre class="raw-json" id="raw-json" hidden></pre>
-        <div id="status" aria-live="polite"></div>
-      </section>
+      <div class="envelope">
+        <p class="block-title" id="envelope-title">Envelope</p>
+        <dl class="env-table">
+          <div class="env-row"><dt id="env-label-from">From</dt><dd id="env-from">—</dd></div>
+          <div class="env-row"><dt id="env-label-to">To</dt><dd id="env-to">—</dd></div>
+          <div class="env-row"><dt id="env-label-subject">Subject</dt><dd id="env-subject">—</dd></div>
+          <div class="env-row"><dt id="env-label-date">Date</dt><dd id="env-date">—</dd></div>
+        </dl>
+        <p class="env-file" id="env-file">No document selected</p>
+      </div>
+
+      <div class="actions">
+        <span class="actions-note" id="actions-note">Max file size: 10 MB</span>
+        <button class="btn" id="submit" type="button">Classify →</button>
+      </div>
     </section>
 
-    <p class="footer"><span id="footer-built">Built by</span> <a href="https://github.com/renat-ibragimov" target="_blank" rel="noopener noreferrer">Renat Ibragimov</a></p>
+    <section class="panel" id="result-panel">
+      <h2 class="panel-title" id="title-result">2. Result</h2>
+      <div id="status" aria-live="polite"></div>
+      <pre class="raw-json" id="raw-json" hidden></pre>
+    </section>
 
   </div>
-</div>
+</main>
 
+<footer class="footer">
+  <div class="footer-inner">
+    <a id="footer-source" href="https://github.com/renat-ibragimov/email_classifier" target="_blank" rel="noopener noreferrer">Source on GitHub</a>
+  </div>
+</footer>
 <script>
 (function () {
   "use strict";
@@ -749,13 +704,9 @@ Subject: Invoice overdue
     en: {
       docTitle: "Email Classifier",
       brandTitle: "Email Classifier",
-      brandTag: "LLM-powered",
       langAria: "Language",
       hero: "Understand every email.",
-      ledeMain: "Upload an .eml file and a language model sorts it into one of six categories.",
-      ledeMore: "Every verdict carries a confidence score, plain-language reasoning, and the signals it was built on.",
-      demoLabel: "Demo project",
-      github: "View on GitHub →",
+      lede: "Upload an .eml file and a language model sorts it into one of six categories.",
       dropOverlay: "Drop the .eml file to classify",
       titleInput: "1. Input",
       titleResult: "2. Result",
@@ -767,22 +718,30 @@ Subject: Invoice overdue
       pasteLabel: "Email text",
       pastePlaceholder: "Paste the email here.\n\nYou can include headers:\nFrom: someone@example.com\nSubject: Invoice overdue\n\n...or just the body text on its own.",
       pasteHint: "Missing From / Subject headers are filled in with placeholders before the .eml is sent.",
-      actionsNote: "Max file size: 10 MB",
-      submit: "Classify email →",
-      submitBusy: "Classifying…",
       samplesTitle: "Try a sample",
-      rawToggle: "View raw JSON { }",
-      placeholder: "No document classified yet",
+      envelopeTitle: "Envelope",
+      envFrom: "From",
+      envTo: "To",
+      envSubject: "Subject",
+      envDate: "Date",
+      envEmpty: "No document selected",
+      envMissing: "—",
+      actionsNote: "Max file size: 10 MB",
+      submit: "Classify →",
+      submitBusy: "Classifying…",
+      emptyState: "Awaiting document",
       loading: "Classifying — the model usually answers within a few seconds.",
+      verdictFlagged: "Flagged",
+      verdictClear: "Clear",
       labelCategory: "Category",
-      labelReason: "Reason",
-      labelSignals: "Signals",
       labelConfidence: "Confidence",
+      labelReasoning: "Reasoning",
+      labelSignals: "Signals",
       labelProcessedAt: "Processed at",
-      labelEmailSize: "Email size",
       labelModel: "Model",
-      stampReviewed: "Re-examined",
-      duplicateNote: "Already classified earlier — showing stored result.",
+      reviewTag: "Second-pass review",
+      rawToggle: "Raw JSON",
+      duplicateNote: "Already classified earlier — showing the stored result.",
       rateTitle: "Rate limit reached",
       rateBody: "This demo accepts 10 classifications per minute. Give it a minute and try again.",
       rejectedTitle: "That file was rejected",
@@ -794,11 +753,11 @@ Subject: Invoice overdue
       emptyPasteTitle: "Nothing to classify",
       emptyPasteBody: "Paste some email text first.",
       noFileTitle: "No file selected",
-      noFileBody: "Choose an .eml file or drop one onto the sheet.",
+      noFileBody: "Choose an .eml file or drop one onto the panel.",
       sampleErrorTitle: "Could not load the sample",
       sampleErrorBody: "Try picking another one.",
       samplesUnavailable: "Samples are unavailable right now.",
-      footerBuilt: "Built by",
+      footerSource: "Source on GitHub",
       detailWrongExtension: "The file is not a valid .eml.",
       detailTooLarge: "The file is larger than 10 MB.",
       detailNoFrom: "The file is not a valid .eml: the From header is missing."
@@ -806,13 +765,9 @@ Subject: Invoice overdue
     uk: {
       docTitle: "Класифікатор листів",
       brandTitle: "Класифікатор листів",
-      brandTag: "На базі LLM",
       langAria: "Мова",
       hero: "Зрозумій кожен лист.",
-      ledeMain: "Завантажте .eml файл — мовна модель віднесе його до однієї з шести категорій.",
-      ledeMore: "Кожен вердикт має оцінку впевненості, пояснення звичайною мовою та перелік ознак, на яких він побудований.",
-      demoLabel: "Демопроєкт",
-      github: "Дивитись на GitHub →",
+      lede: "Завантажте .eml файл — мовна модель віднесе його до однієї з шести категорій.",
       dropOverlay: "Відпустіть .eml файл для класифікації",
       titleInput: "1. Вхідні дані",
       titleResult: "2. Результат",
@@ -824,21 +779,29 @@ Subject: Invoice overdue
       pasteLabel: "Текст листа",
       pastePlaceholder: "Вставте лист сюди.\n\nМожна разом із заголовками:\nFrom: someone@example.com\nSubject: Рахунок прострочено\n\n...або лише текст листа.",
       pasteHint: "Відсутні заголовки From / Subject буде замінено заглушками перед надсиланням .eml.",
+      samplesTitle: "Спробуйте зразок",
+      envelopeTitle: "Конверт",
+      envFrom: "Від",
+      envTo: "Кому",
+      envSubject: "Тема",
+      envDate: "Дата",
+      envEmpty: "Документ не обрано",
+      envMissing: "—",
       actionsNote: "Максимальний розмір файлу: 10 МБ",
       submit: "Класифікувати →",
       submitBusy: "Класифікую…",
-      samplesTitle: "Спробуйте зразок",
-      rawToggle: "Показати сирий JSON { }",
-      placeholder: "Ще жодного документа не класифіковано",
+      emptyState: "Очікує документ",
       loading: "Класифікую — зазвичай модель відповідає за кілька секунд.",
+      verdictFlagged: "Загроза",
+      verdictClear: "Чисто",
       labelCategory: "Категорія",
-      labelReason: "Обґрунтування",
-      labelSignals: "Ознаки",
       labelConfidence: "Впевненість",
+      labelReasoning: "Обґрунтування",
+      labelSignals: "Ознаки",
       labelProcessedAt: "Оброблено",
-      labelEmailSize: "Розмір листа",
       labelModel: "Модель",
-      stampReviewed: "Перевірено вдруге",
+      reviewTag: "Повторна перевірка",
+      rawToggle: "Сирий JSON",
       duplicateNote: "Цей лист уже класифіковано — показано збережений результат.",
       rateTitle: "Перевищено ліміт запитів",
       rateBody: "Демо приймає 10 класифікацій на хвилину. Зачекайте хвилину та спробуйте знову.",
@@ -851,19 +814,18 @@ Subject: Invoice overdue
       emptyPasteTitle: "Нічого класифікувати",
       emptyPasteBody: "Спершу вставте текст листа.",
       noFileTitle: "Файл не обрано",
-      noFileBody: "Оберіть .eml файл або перетягніть його на аркуш.",
+      noFileBody: "Оберіть .eml файл або перетягніть його на панель.",
       sampleErrorTitle: "Не вдалося завантажити зразок",
       sampleErrorBody: "Спробуйте інший.",
       samplesUnavailable: "Зразки зараз недоступні.",
-      footerBuilt: "Створив",
+      footerSource: "Вихідний код на GitHub",
       detailWrongExtension: "Файл не є коректним .eml.",
       detailTooLarge: "Файл більший за 10 МБ.",
       detailNoFrom: "Файл не є коректним .eml: відсутній заголовок From."
     }
   };
 
-  /* Category and status labels are display-only; the raw JSON keeps the English
-     enum value the API actually returned. */
+  /* Display names only; the raw JSON keeps the English enum value the API returned. */
   var CATEGORY_NAMES = {
     en: {
       phishing: "Phishing",
@@ -874,12 +836,12 @@ Subject: Invoice overdue
       automated: "Automated"
     },
     uk: {
-      phishing: "ФІШИНГ",
-      spam: "СПАМ",
-      newsletter: "РОЗСИЛКА",
-      transactional: "ТРАНЗАКЦІЙНИЙ",
-      personal: "ОСОБИСТИЙ",
-      automated: "АВТОМАТИЧНИЙ"
+      phishing: "Фішинг",
+      spam: "Спам",
+      newsletter: "Розсилка",
+      transactional: "Транзакційний",
+      personal: "Особистий",
+      automated: "Автоматичний"
     }
   };
 
@@ -889,6 +851,18 @@ Subject: Invoice overdue
   };
 
   var UNKNOWN_CATEGORY = { en: "Unknown", uk: "Невідомо" };
+
+  var CATEGORY_COLORS = {
+    phishing: "var(--cat-phishing)",
+    spam: "var(--cat-spam)",
+    newsletter: "var(--cat-newsletter)",
+    transactional: "var(--cat-transactional)",
+    personal: "var(--cat-personal)",
+    automated: "var(--cat-automated)"
+  };
+
+  /* The verdict is a client-side reading of the category, not a field the API returns. */
+  var FLAGGED_CATEGORIES = { phishing: true, spam: true };
 
   /* Server-side 422 details are English; map the known ones onto dictionary keys. */
   var DETAIL_KEYS = {
@@ -911,27 +885,11 @@ Subject: Invoice overdue
     return table[key] !== undefined ? table[key] : I18N[DEFAULT_LANG][key];
   }
 
-  /* ---------- static assets of the page ---------- */
-
-  var CATEGORY_COLORS = {
-    phishing: "var(--cat-phishing)",
-    spam: "var(--cat-spam)",
-    newsletter: "var(--cat-newsletter)",
-    transactional: "var(--cat-transactional)",
-    personal: "var(--cat-personal)",
-    automated: "var(--cat-automated)"
-  };
-
-  /* Worn-ink mask for the stamp: one turbulence tile, punched into the paint. */
-  var WORN =
-    "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='130'%3E" +
-    "%3Cfilter id='w'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='3' seed='7'/%3E" +
-    "%3CfeColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 -1.7 1.95'/%3E%3C/filter%3E" +
-    "%3Crect width='220' height='130' filter='url(%23w)'/%3E%3C/svg%3E\")";
+  /* ---------- elements ---------- */
 
   var HEADER_RE = /^[A-Za-z][A-Za-z0-9-]*:\s/;
 
-  var card = document.getElementById("card");
+  var inputPanel = document.getElementById("input-panel");
   var tabUpload = document.getElementById("tab-upload");
   var tabPaste = document.getElementById("tab-paste");
   var panelUpload = document.getElementById("panel-upload");
@@ -943,14 +901,14 @@ Subject: Invoice overdue
   var submit = document.getElementById("submit");
   var sampleRow = document.getElementById("sample-row");
   var status = document.getElementById("status");
-  var rawToggle = document.getElementById("raw-toggle");
   var rawJson = document.getElementById("raw-json");
   var langSwitch = document.getElementById("lang-switch");
 
   var selectedFile = null;
   var busy = false;
-  var lastSize = null;
   var samples = [];
+  var uploadEnvelope = null;
+  var pasteEnvelope = null;
 
   /* The current view is kept as a thunk so switching language re-renders it
      from the data already in hand, without re-running any classification. */
@@ -968,6 +926,142 @@ Subject: Invoice overdue
     if (node) { node.textContent = value; }
   }
 
+  function isPasteActive() {
+    return tabPaste.getAttribute("aria-selected") === "true";
+  }
+
+  /* ---------- formatting helpers ---------- */
+
+  function formatSize(bytes) {
+    if (typeof bytes !== "number") { return "—"; }
+    if (bytes < 1024) { return bytes + " B"; }
+    if (bytes < 1024 * 1024) { return (bytes / 1024).toFixed(1) + " KB"; }
+    return (bytes / (1024 * 1024)).toFixed(2) + " MB";
+  }
+
+  function pad2(value) {
+    return value < 10 ? "0" + value : String(value);
+  }
+
+  /* "01 Sep 2026, 11:25" / "01 вер. 2026, 11:25", local timezone. Built by hand
+     rather than via toLocaleString so the output does not drift per device. */
+  function formatDate(value) {
+    if (!value) { return "—"; }
+    var date = new Date(value);
+    if (isNaN(date.getTime())) { return "—"; }
+    return pad2(date.getDate()) + " " + MONTHS[lang][date.getMonth()] + " " + date.getFullYear() +
+      ", " + pad2(date.getHours()) + ":" + pad2(date.getMinutes());
+  }
+
+  function categoryName(category) {
+    var names = CATEGORY_NAMES[lang] || CATEGORY_NAMES[DEFAULT_LANG];
+    return names[category] || UNKNOWN_CATEGORY[lang] || UNKNOWN_CATEGORY[DEFAULT_LANG];
+  }
+
+  function statusName(value) {
+    var names = STATUS_NAMES[lang] || STATUS_NAMES[DEFAULT_LANG];
+    return names[value] || value;
+  }
+
+  function isFlagged(category) {
+    return FLAGGED_CATEGORIES[category] === true;
+  }
+
+  /* ---------- envelope: client-side header preview ---------- */
+
+  /* Minimal RFC 2047: decodes =?charset?B|Q?text?= words, leaves anything it
+     cannot decode (unknown charset, malformed word) as the raw source text. */
+  function decodeWords(value) {
+    if (!value || value.indexOf("=?") === -1) { return value; }
+
+    return value
+      .replace(/\?=\s+=\?/g, "?==?")
+      .replace(/=\?([^?]+)\?([BbQq])\?([^?]*)\?=/g, function (match, charset, encoding, text) {
+        try {
+          var bytes;
+          if (encoding.toUpperCase() === "B") {
+            var binary = atob(text.replace(/\s/g, ""));
+            bytes = new Uint8Array(binary.length);
+            for (var i = 0; i < binary.length; i += 1) { bytes[i] = binary.charCodeAt(i); }
+          } else {
+            var quoted = text.replace(/_/g, " ");
+            var octets = [];
+            for (var j = 0; j < quoted.length; j += 1) {
+              if (quoted.charAt(j) === "=" && j + 2 < quoted.length) {
+                octets.push(parseInt(quoted.substr(j + 1, 2), 16));
+                j += 2;
+              } else {
+                octets.push(quoted.charCodeAt(j));
+              }
+            }
+            bytes = new Uint8Array(octets);
+          }
+          return new TextDecoder(charset.split("*")[0]).decode(bytes);
+        } catch (error) {
+          return match;
+        }
+      });
+  }
+
+  function parseHeaders(raw) {
+    var text = raw.replace(/\r\n/g, "\n");
+    var split = text.indexOf("\n\n");
+    var head = split === -1 ? text : text.slice(0, split);
+
+    var unfolded = [];
+    head.split("\n").forEach(function (line) {
+      if (/^[ \t]/.test(line) && unfolded.length) {
+        unfolded[unfolded.length - 1] += " " + line.trim();
+      } else {
+        unfolded.push(line);
+      }
+    });
+
+    var headers = {};
+    unfolded.forEach(function (line) {
+      var colon = line.indexOf(":");
+      if (colon > 0) {
+        var name = line.slice(0, colon).trim().toLowerCase();
+        if (!(name in headers)) { headers[name] = line.slice(colon + 1).trim(); }
+      }
+    });
+    return headers;
+  }
+
+  function buildEnvelope(raw, name, size) {
+    var headers = parseHeaders(raw);
+    return {
+      from: decodeWords(headers.from || ""),
+      to: decodeWords(headers.to || ""),
+      subject: decodeWords(headers.subject || ""),
+      date: headers.date || "",
+      name: name,
+      size: size
+    };
+  }
+
+  function renderEnvelope() {
+    var envelope = isPasteActive() ? pasteEnvelope : uploadEnvelope;
+    var missing = t("envMissing");
+
+    setText("env-from", envelope ? envelope.from || missing : missing);
+    setText("env-to", envelope ? envelope.to || missing : missing);
+    setText("env-subject", envelope ? envelope.subject || missing : missing);
+    setText("env-date", envelope ? envelope.date || missing : missing);
+    setText("env-file", envelope ? envelope.name + " · " + formatSize(envelope.size) : t("envEmpty"));
+  }
+
+  function refreshPasteEnvelope() {
+    var text = pastebox.value.trim();
+    if (!text) {
+      pasteEnvelope = null;
+    } else {
+      var eml = buildEml(text);
+      pasteEnvelope = buildEnvelope(eml, "pasted.eml", new Blob([eml]).size);
+    }
+    renderEnvelope();
+  }
+
   /* ---------- language ---------- */
 
   function applyStaticStrings() {
@@ -975,19 +1069,21 @@ Subject: Invoice overdue
     document.title = t("docTitle");
 
     setText("brand-title", t("brandTitle"));
-    setText("brand-tag", t("brandTag"));
     setText("hero", t("hero"));
-    setText("lede-main", t("ledeMain"));
-    setText("lede-more", t("ledeMore"));
-    setText("demo-label", t("demoLabel"));
-    setText("github-btn", t("github"));
+    setText("lede", t("lede"));
     setText("drop-overlay", t("dropOverlay"));
     setText("title-input", t("titleInput"));
     setText("title-result", t("titleResult"));
     setText("samples-label", t("samplesTitle"));
     setText("paste-hint", t("pasteHint"));
     setText("actions-note", t("actionsNote"));
-    setText("footer-built", t("footerBuilt"));
+    setText("footer-source", t("footerSource"));
+
+    setText("envelope-title", t("envelopeTitle"));
+    setText("env-label-from", t("envFrom"));
+    setText("env-label-to", t("envTo"));
+    setText("env-label-subject", t("envSubject"));
+    setText("env-label-date", t("envDate"));
 
     tabUpload.textContent = t("tabUpload");
     tabPaste.textContent = t("tabPaste");
@@ -997,11 +1093,9 @@ Subject: Invoice overdue
     setText("filedrop-browse", t("filedropBrowse"));
 
     pastebox.placeholder = t("pastePlaceholder");
-    document.querySelector("label[for=\"pastebox\"]").textContent = t("pasteLabel");
+    document.querySelector("label[for='pastebox']").textContent = t("pasteLabel");
 
-    rawToggle.textContent = t("rawToggle");
     langSwitch.setAttribute("aria-label", t("langAria"));
-
     submit.textContent = busy ? t("submitBusy") : t("submit");
 
     Array.prototype.forEach.call(langSwitch.querySelectorAll(".lang"), function (button) {
@@ -1015,6 +1109,7 @@ Subject: Invoice overdue
     lang = next;
     try { window.localStorage.setItem(LANG_KEY, lang); } catch (error) { /* private mode */ }
     applyStaticStrings();
+    renderEnvelope();
     renderSamples();
     renderCurrentView();
   }
@@ -1032,6 +1127,7 @@ Subject: Invoice overdue
     tabPaste.setAttribute("aria-selected", String(!isUpload));
     panelUpload.hidden = !isUpload;
     panelPaste.hidden = isUpload;
+    renderEnvelope();
   }
 
   tabUpload.addEventListener("click", function () { selectTab("upload"); });
@@ -1039,14 +1135,25 @@ Subject: Invoice overdue
 
   /* ---------- file picking ---------- */
 
-  function setFile(file) {
+  async function setFile(file) {
     selectedFile = file;
-    if (file) {
-      filename.textContent = file.name;
-      filename.hidden = false;
-    } else {
+
+    if (!file) {
       filename.hidden = true;
+      uploadEnvelope = null;
+      renderEnvelope();
+      return;
     }
+
+    filename.textContent = file.name;
+    filename.hidden = false;
+
+    try {
+      uploadEnvelope = buildEnvelope(await file.text(), file.name, file.size);
+    } catch (error) {
+      uploadEnvelope = { from: "", to: "", subject: "", date: "", name: file.name, size: file.size };
+    }
+    renderEnvelope();
   }
 
   filedrop.addEventListener("click", function () { fileinput.click(); });
@@ -1062,30 +1169,32 @@ Subject: Invoice overdue
     setFile(fileinput.files.length ? fileinput.files[0] : null);
   });
 
-  /* ---------- drag and drop over the whole sheet ---------- */
+  pastebox.addEventListener("input", refreshPasteEnvelope);
+
+  /* ---------- drag and drop over the input panel ---------- */
 
   var dragDepth = 0;
 
-  card.addEventListener("dragenter", function (event) {
+  inputPanel.addEventListener("dragenter", function (event) {
     event.preventDefault();
     dragDepth += 1;
-    card.classList.add("dragover");
+    inputPanel.classList.add("dragover");
   });
 
-  card.addEventListener("dragover", function (event) { event.preventDefault(); });
+  inputPanel.addEventListener("dragover", function (event) { event.preventDefault(); });
 
-  card.addEventListener("dragleave", function () {
+  inputPanel.addEventListener("dragleave", function () {
     dragDepth -= 1;
     if (dragDepth <= 0) {
       dragDepth = 0;
-      card.classList.remove("dragover");
+      inputPanel.classList.remove("dragover");
     }
   });
 
-  card.addEventListener("drop", function (event) {
+  inputPanel.addEventListener("drop", function (event) {
     event.preventDefault();
     dragDepth = 0;
-    card.classList.remove("dragover");
+    inputPanel.classList.remove("dragover");
     if (!event.dataTransfer || !event.dataTransfer.files.length) { return; }
     selectTab("upload");
     setFile(event.dataTransfer.files[0]);
@@ -1129,65 +1238,23 @@ Subject: Invoice overdue
     return new File([text], name, { type: "message/rfc822" });
   }
 
-  /* ---------- raw JSON toggle ---------- */
+  /* ---------- raw JSON ---------- */
 
   function setRaw(data) {
     if (data === null) {
       rawJson.textContent = "";
       rawJson.hidden = true;
-      rawToggle.disabled = true;
-      rawToggle.setAttribute("aria-expanded", "false");
       return;
     }
     rawJson.textContent = JSON.stringify(data, null, 2);
-    rawToggle.disabled = false;
-  }
-
-  rawToggle.addEventListener("click", function () {
-    var open = rawJson.hidden;
-    rawJson.hidden = !open;
-    rawToggle.setAttribute("aria-expanded", String(open));
-  });
-
-  /* ---------- formatting helpers ---------- */
-
-  function formatSize(bytes) {
-    if (typeof bytes !== "number") { return "—"; }
-    if (bytes < 1024) { return bytes + " B"; }
-    if (bytes < 1024 * 1024) { return (bytes / 1024).toFixed(1) + " KB"; }
-    return (bytes / (1024 * 1024)).toFixed(2) + " MB";
-  }
-
-  function pad2(value) {
-    return value < 10 ? "0" + value : String(value);
-  }
-
-  /* "01 Sep 2026, 11:25" / "01 вер. 2026, 11:25", local timezone. Built by hand
-     rather than via toLocaleString so the output does not drift per device. */
-  function formatDate(value) {
-    if (!value) { return "—"; }
-    var date = new Date(value);
-    if (isNaN(date.getTime())) { return "—"; }
-    return pad2(date.getDate()) + " " + MONTHS[lang][date.getMonth()] + " " + date.getFullYear() +
-      ", " + pad2(date.getHours()) + ":" + pad2(date.getMinutes());
-  }
-
-  function categoryName(category) {
-    var names = CATEGORY_NAMES[lang] || CATEGORY_NAMES[DEFAULT_LANG];
-    return names[category] || UNKNOWN_CATEGORY[lang] || UNKNOWN_CATEGORY[DEFAULT_LANG];
-  }
-
-  function statusName(value) {
-    var names = STATUS_NAMES[lang] || STATUS_NAMES[DEFAULT_LANG];
-    return names[value] || value;
   }
 
   /* ---------- rendering ---------- */
 
-  function showPlaceholder() {
-    renderCurrentView = showPlaceholder;
+  function showEmpty() {
+    renderCurrentView = showEmpty;
     status.innerHTML = "";
-    status.appendChild(el("div", "placeholder", t("placeholder")));
+    status.appendChild(el("div", "empty", t("emptyState")));
     setRaw(null);
   }
 
@@ -1207,91 +1274,95 @@ Subject: Invoice overdue
     box.appendChild(el("p", "alert-title", t(titleKey)));
     box.appendChild(el("p", "alert-body", t(bodyKey)));
     status.appendChild(box);
+    setRaw(null);
   }
 
-  function metaItem(label, value) {
-    var item = el("div", "meta-item");
-    item.appendChild(el("span", "label", label));
-    item.appendChild(el("p", "meta-value", value));
-    return item;
+  function metaBlock(data) {
+    var line = el("div", "meta-line");
+
+    line.appendChild(el("span", null, t("labelProcessedAt") + " " + formatDate(data.created_at)));
+    line.appendChild(el("span", "meta-sep", "·"));
+    line.appendChild(el("span", null, t("labelModel") + " " + (data.model || "—")));
+
+    var toggle = el("button", "raw-toggle", t("rawToggle"));
+    toggle.type = "button";
+    toggle.setAttribute("aria-controls", "raw-json");
+    toggle.setAttribute("aria-expanded", String(!rawJson.hidden));
+    toggle.addEventListener("click", function () {
+      var open = rawJson.hidden;
+      rawJson.hidden = !open;
+      toggle.setAttribute("aria-expanded", String(open));
+    });
+    line.appendChild(toggle);
+
+    return line;
   }
 
   function showResult(data, isDuplicate) {
     renderCurrentView = function () { showResult(data, isDuplicate); };
 
+    var flagged = isFlagged(data.category);
     var color = CATEGORY_COLORS[data.category] || "var(--cat-automated)";
     var confidence = typeof data.confidence === "number" ? data.confidence : 0;
 
     status.innerHTML = "";
     setRaw(data);
 
-    var result = el("div", "result");
-
     if (isDuplicate) {
-      result.appendChild(el("p", "note", t("duplicateNote")));
+      status.appendChild(el("p", "dup-note", t("duplicateNote")));
     }
 
-    var grid = el("div", "result-grid");
-    var mainCol = el("div", "result-main");
+    status.appendChild(
+      el("div", "verdict " + (flagged ? "flagged" : "clear"), flagged ? t("verdictFlagged") : t("verdictClear"))
+    );
 
-    mainCol.appendChild(el("span", "label", t("labelCategory")));
+    var row = el("div", "result-row");
 
-    var stampArea = el("div", "stamp-area");
-    var stamp = el("span", "stamp", categoryName(data.category));
-    stamp.style.setProperty("--stamp-color", color);
-    stamp.style.setProperty("--worn", WORN);
-    stampArea.appendChild(stamp);
-
+    var categoryCell = el("div");
+    categoryCell.appendChild(el("span", "label", t("labelCategory")));
+    var categoryLine = el("p", "category-line");
+    var name = el("span", "category-name", categoryName(data.category));
+    name.style.setProperty("--cat-color", color);
+    categoryLine.appendChild(name);
     if (data.reviewed) {
-      var reStamp = el("span", "stamp small", t("stampReviewed"));
-      reStamp.style.setProperty("--worn", WORN);
-      stampArea.appendChild(reStamp);
+      categoryLine.appendChild(el("span", "review-tag", t("reviewTag")));
     }
     if (data.status && data.status !== "classified") {
-      var statusStamp = el("span", "stamp small", statusName(data.status));
-      statusStamp.style.setProperty("--worn", WORN);
-      stampArea.appendChild(statusStamp);
+      categoryLine.appendChild(el("span", "review-tag", statusName(data.status)));
     }
-    mainCol.appendChild(stampArea);
+    categoryCell.appendChild(categoryLine);
+    row.appendChild(categoryCell);
+
+    var confidenceCell = el("div");
+    confidenceCell.appendChild(el("span", "label", t("labelConfidence")));
+    confidenceCell.appendChild(el("p", "confidence-value", Math.round(confidence * 100) + "%"));
+    var meter = el("div", "meter");
+    var fill = el("div", "meter-fill");
+    fill.style.setProperty("--cat-color", color);
+    fill.style.width = Math.max(0, Math.min(1, confidence)) * 100 + "%";
+    meter.appendChild(fill);
+    confidenceCell.appendChild(meter);
+    row.appendChild(confidenceCell);
+
+    status.appendChild(row);
 
     if (data.reasoning) {
-      var reason = el("div", "result-section");
-      reason.appendChild(el("span", "label", t("labelReason")));
-      reason.appendChild(el("p", "reasoning", data.reasoning));
-      mainCol.appendChild(reason);
+      var reasoning = el("div", "result-section");
+      reasoning.appendChild(el("span", "label", t("labelReasoning")));
+      reasoning.appendChild(el("p", "reasoning", data.reasoning));
+      status.appendChild(reasoning);
     }
 
     if (data.signals && data.signals.length) {
       var signals = el("div", "result-section");
       signals.appendChild(el("span", "label", t("labelSignals")));
-      var list = el("ul", "signals");
+      var list = el("ul", "signals" + (flagged ? " flagged" : ""));
       data.signals.forEach(function (signal) { list.appendChild(el("li", null, signal)); });
       signals.appendChild(list);
-      mainCol.appendChild(signals);
+      status.appendChild(signals);
     }
 
-    var metaCol = el("div", "meta");
-
-    var confItem = el("div", "meta-item");
-    confItem.appendChild(el("span", "label", t("labelConfidence")));
-    confItem.appendChild(el("p", "meta-confidence", confidence.toFixed(2)));
-    var meter = el("div", "meter");
-    var fill = el("div", "meter-fill");
-    fill.style.setProperty("--stamp-color", color);
-    fill.style.width = Math.max(0, Math.min(1, confidence)) * 100 + "%";
-    meter.appendChild(fill);
-    confItem.appendChild(meter);
-    metaCol.appendChild(confItem);
-
-    metaCol.appendChild(metaItem(t("labelProcessedAt"), formatDate(data.created_at)));
-    metaCol.appendChild(metaItem(t("labelEmailSize"), formatSize(lastSize)));
-    metaCol.appendChild(metaItem(t("labelModel"), data.model || "—"));
-
-    grid.appendChild(mainCol);
-    grid.appendChild(metaCol);
-    result.appendChild(grid);
-
-    status.appendChild(result);
+    status.appendChild(metaBlock(data));
   }
 
   /* ---------- submitting ---------- */
@@ -1315,7 +1386,6 @@ Subject: Invoice overdue
     setBusy(true);
     showLoading();
     setRaw(null);
-    lastSize = file.size;
 
     var form = new FormData();
     form.append("file", file);
@@ -1351,9 +1421,7 @@ Subject: Invoice overdue
   }
 
   submit.addEventListener("click", function () {
-    var pasteActive = tabPaste.getAttribute("aria-selected") === "true";
-
-    if (pasteActive) {
+    if (isPasteActive()) {
       var text = pastebox.value.trim();
       if (!text) {
         showAlert("emptyPasteTitle", "emptyPasteBody", "warn");
@@ -1397,11 +1465,11 @@ Subject: Invoice overdue
         setBusy(true);
         showLoading();
         try {
-          var file = await fetch("/static/samples/" + sample.filename);
-          var text = await file.text();
+          var response = await fetch("/static/samples/" + sample.filename);
+          var text = await response.text();
           setBusy(false);
           selectTab("upload");
-          setFile(textToFile(text, sample.filename));
+          await setFile(textToFile(text, sample.filename));
           classify(textToFile(text, sample.filename));
         } catch (error) {
           setBusy(false);
@@ -1426,7 +1494,8 @@ Subject: Invoice overdue
   }
 
   applyStaticStrings();
-  showPlaceholder();
+  renderEnvelope();
+  showEmpty();
   loadSamples();
 })();
 </script>
