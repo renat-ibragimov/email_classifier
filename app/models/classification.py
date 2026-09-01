@@ -1,6 +1,7 @@
 import uuid
+from datetime import datetime
 
-from sqlalchemy import Boolean, Enum, Float, String, Text
+from sqlalchemy import Boolean, DateTime, Enum, Float, String, Text, func
 from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -64,4 +65,10 @@ class ClassificationRecord(Base):
         Boolean,
         default=False,
         comment="True if a second LLM pass was performed due to low confidence",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+        comment="When the record was first stored",
     )

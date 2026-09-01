@@ -1,9 +1,11 @@
 import uuid
+from datetime import datetime
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from app.config import settings
 from app.helpers.dto import ClassificationResult
 from app.helpers.enums import EmailCategoryEnum
 from app.main import app
@@ -53,6 +55,9 @@ class TestPostClassify:
         assert body["category"] == "spam"
         assert body["confidence"] == 0.95
         assert body["reviewed"] is False
+        assert body["model"] == settings.openai_model
+        # created_at is set by the DB default and must parse as a real timestamp.
+        assert datetime.fromisoformat(body["created_at"]).tzinfo is not None
 
     async def test_duplicate_returns_200(self, db_session, mock_classifier):
         r1 = await _post(VALID_EML)
@@ -61,6 +66,7 @@ class TestPostClassify:
         r2 = await _post(VALID_EML)
         assert r2.status_code == 200
         assert r2.json()["id"] == r1.json()["id"]
+        assert r2.json()["created_at"] == r1.json()["created_at"]
         # Mock was only invoked for the first request.
         assert mock_classifier.call_count == 1
 
@@ -101,6 +107,8 @@ class TestGetClassify:
         body = r2.json()
         assert body["id"] == record_id
         assert body["category"] == "spam"
+        assert body["model"] == settings.openai_model
+        assert body["created_at"] == r1.json()["created_at"]
 
     async def test_returns_404_for_missing(self, db_session):
         response = await _get(uuid.uuid4())
