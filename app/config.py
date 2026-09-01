@@ -9,7 +9,9 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-4o-mini"
     confidence_threshold: float = 0.85
 
-    model_config = {"env_file": ".env"}
+    # The .env is shared with the bot service, so vars this app does not own
+    # (BOT_TOKEN, ...) must be ignored rather than rejected.
+    model_config = {"env_file": ".env", "extra": "ignore"}
 
 
 settings = Settings()

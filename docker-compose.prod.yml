@@ -28,6 +28,22 @@ services:
       - default
       - web
 
+  bot:
+    build:
+      context: .
+      dockerfile: bot/Dockerfile
+    container_name: email-classifier-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Reaches the API over the default compose network by service name.
+      API_BASE_URL: http://app:8000
+    depends_on:
+      - app
+    networks:
+      - default
+
 volumes:
   pgdata:
 

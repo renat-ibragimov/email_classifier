@@ -81,4 +81,4 @@ test: clean-artifacts
 cov: clean-artifacts
 	@docker compose -f docker-compose-test.yml build --no-cache $(APP_NAME_TEST)
 	-@docker compose -f docker-compose-test.yml run --rm $(APP_NAME_TEST) ruff check .
-	@docker compose -f docker-compose-test.yml run --rm $(APP_NAME_TEST) pytest --cov=app --cov-report=term-missing tests/
+	@docker compose -f docker-compose-test.yml run --rm $(APP_NAME_TEST) pytest --cov=app --cov=bot --cov-report=term-missing tests/

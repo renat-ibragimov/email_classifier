@@ -11,6 +11,7 @@ Each email is assigned one of six categories (**spam**, **phishing**, **newslett
 - `POST /classify/` - upload an `.eml` file and get a classification back
 - `GET /classify/{id}/` - fetch a previously classified record by ID
 - `GET /health` - liveness probe, returns `{"status": "ok"}`
+- **Telegram bot** in [`bot/`](bot/) - forward it an email, paste one, or attach an `.eml`; it calls the same HTTP API (see [Telegram bot](#telegram-bot))
 - **Demo frontend** at `/` - a single static page (no build step, no framework) to upload an `.eml`, paste raw email text, or classify one of the bundled samples. It parses the headers client-side into an ENVELOPE preview before sending, and reads the category into a FLAGGED / CLEAR verdict of its own
 - **Rate limiting** on `POST /classify/`: 10 requests per minute per client IP (in-memory, via `slowapi`), keyed off `X-Forwarded-For` so it works behind a reverse proxy
 - **Deduplication** by SHA-256 of raw `.eml` bytes plus the requested language; the same file uploaded twice in the same language returns the cached result with `200` instead of re-running the LLM
@@ -132,6 +133,46 @@ curl http://localhost:8000/classify/<record-id>/
 | `GET /health` | `200 OK` | Always, while the process is up |
 | `GET /` | `200 OK` | Demo frontend page |
 
+## Telegram bot
+
+A second service in [`bot/`](bot/) puts the same classifier in a Telegram chat. It is a **pure API client**: it never imports the classification service, only calls `POST /classify/`. It does reuse `EmailCategoryEnum` and `LanguageEnum` from `app.helpers.enums`, so the categories and languages cannot drift apart.
+
+It accepts an email in three forms:
+
+- a **forwarded message** — the original sender's name is read from the forward metadata and becomes the `From` display name
+- **pasted text** — the first line becomes the `Subject`, the whole text becomes the body
+- an **`.eml` file**, up to 1 MB
+
+For the first two the bot builds a minimal RFC-822 message with `email.message.EmailMessage` and uploads that, so the API sees the same thing either way.
+
+The reply is a single card: verdict (🔴 FLAGGED / 🟢 CLEAR, the only place emoji are used), category, confidence, the reasoning, and the signals as a numbered list.
+
+| Command | What it does |
+| --- | --- |
+| `/start`, `/help` | What to send, plus the privacy note |
+| `/lang` | Toggle between Ukrainian (default) and English |
+
+The language preference is per user and kept in memory — the bot owns no database, and a restart just returns everyone to the Ukrainian default.
+
+### Running it locally
+
+Point it at the deployed API, so you need nothing else running:
+
+```bash
+pip install -e ".[bot]"
+export BOT_TOKEN=123456:your-token-from-botfather
+export API_BASE_URL=https://emails.renat-ibragimov.com
+python -m bot
+```
+
+| Variable | Required | Default | Notes |
+| --- | --- | --- | --- |
+| `BOT_TOKEN` | yes | — | From [@BotFather](https://t.me/BotFather) |
+| `API_BASE_URL` | no | `http://email-classifier:8000` | The compose service sets `http://app:8000` |
+| `LOG_LEVEL` | no | `INFO` | |
+
+In Docker the bot is deployed alongside the API: `docker-compose.prod.yml` builds it from [`bot/Dockerfile`](bot/Dockerfile), gives it no published ports, and lets it reach the API over the default compose network. Both services read the same `.env`, which is why each settings class ignores the variables it does not own.
+
 ## Deployment
 
 The demo runs behind a [Caddy](https://caddyserver.com/) reverse proxy that terminates TLS. `docker-compose.prod.yml` is the dev stack minus published ports: neither Postgres nor the app is reachable from the host, and the app joins an external Docker network named `web` that Caddy is also attached to.
@@ -181,6 +222,16 @@ app/
 ├── database/                       Async engine + session factory
 ├── rate_limit.py                   slowapi limiter, X-Forwarded-For key func, JSON 429 handler
 └── config.py                       pydantic-settings
+
+bot/
+├── __main__.py      Entry point: `python -m bot`, long polling
+├── handlers.py      aiogram routers: commands, text/forward, .eml document
+├── api.py           httpx client for POST /classify/ + error mapping
+├── eml.py           Telegram message -> RFC-822 .eml bytes
+├── formatting.py    Result card (HTML), truncated to Telegram's limit
+├── i18n.py          en/uk strings, category names, the FLAGGED reading
+├── language.py      Per-user language, in memory
+└── config.py        pydantic-settings
 ```
 
 ### Design notes worth highlighting
@@ -193,6 +244,7 @@ app/
 - **The demo entrypoints are uncached.** `/` and `/static/samples/samples.json` are served with `Cache-Control: no-cache` (the manifest via an explicit route declared *before* the `/static` mount, so it wins the match), and the page fetches the manifest with `cache: "no-store"`. Without it, a redeploy showed up only after a hard refresh. The `.eml` samples never change, so they stay cacheable.
 - **High-risk topics always get a second opinion.** The review pass normally runs only on low confidence. `HIGH_RISK_CUES` in `services/classifier.py` — password, passcode, verify your account, login, sign in, portal, reset, update your, deadline, expires, urgent, immediately, suspended — is matched case-insensitively against subject + body, and any hit forces the review even at high confidence. A confidently wrong "personal" on a credential-harvesting email is the expensive failure here; a second call is the cheap insurance. The review prompt asks the analyst to state what would have to be true for such an email to be safe before keeping a benign category.
 - **Analyze first, translate after.** The analysis runs in English regardless of the requested output language, so a Ukrainian request gets exactly the same verdict as an English one. Translating the finished result also keeps the failure contained: a broken translation degrades to English text, it cannot change a category.
+- **The bot never imports the service.** It talks to the API over HTTP like any third-party client would, which keeps the API honest: anything the bot needs has to exist in the public contract. The only shared code is `app.helpers.enums`, so a new category cannot appear on one side and not the other.
 - **The verdict is the frontend's own reading.** `FLAGGED` / `CLEAR` is derived in the browser from `category` (phishing and spam are flagged); the API has no verdict field and stays the single source of the category itself.
 - **Enums are PostgreSQL-native.** `classification_status` and `email_category` are `CREATE TYPE` enums, owned by the Alembic migration. SQLAlchemy column definitions use `create_type=False` — the migration is the single source of truth.
 
@@ -227,10 +279,11 @@ Tests run in a dedicated Docker Compose stack (`docker-compose-test.yml`) with a
 - **Languages**: the default (`en`), analysis prompts and tool schema staying English for both languages, the translation call receiving the English result and its output being what the API returns, both fallback paths (failed call, signal-count mismatch), language-scoped dedup (same file as `en` then `uk` → two `201`s), and `422` on an unknown language.
 - **Review triggers**: low confidence, and every high-risk cue forcing a review at high confidence; a benign confident email stays single-pass.
 - **Force**: `?force=true` bypassing the cache, persisting the new verdict on the same row, and staying scoped to one language.
+- **Bot** (`tests/bot/`, no Telegram and no network): building the `.eml` from pasted text and from every forward-origin shape, card formatting flagged/clear in both languages, truncation, the default and toggling of the language, and the API error mapping via `httpx.MockTransport`. None of it needs `BOT_TOKEN`.
 - **Caching**: `/` and the samples manifest carry `Cache-Control: no-cache`; the `.eml` samples do not.
 
 ```bash
 make cov
 ```
 
-Current coverage: **100%** across 24 modules (326 statements), 112 tests.
+Current coverage: **100%** across both packages — 33 modules (566 statements), 220 tests. The bot's polling entry point (`bot/__main__.py`) is process wiring and is omitted.
