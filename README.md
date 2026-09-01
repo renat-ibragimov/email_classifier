@@ -190,6 +190,7 @@ make clean             # full cleanup, including caches and containers
 
 make ruff_check        # lint
 make ruff_fix          # lint with --fix (auto-applies safe fixes back to the host)
+make ruff_format       # reformat with ruff format — manual only, CI never reformats
 
 make test              # ruff (soft) + run all tests
 make test k=hasher     # run only tests matching "hasher"

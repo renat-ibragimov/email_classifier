@@ -1,7 +1,7 @@
 APP_NAME = app
 APP_NAME_TEST = test_app
 
-.PHONY: clean help build run stop clean-pyc clean-build clean-cache clean-artifacts ruff_check ruff_fix test cov
+.PHONY: clean help build run stop clean-pyc clean-build clean-cache clean-artifacts ruff_check ruff_fix ruff_format test cov
 
 help:
 	@echo "==================== Usage ===================="
@@ -15,6 +15,7 @@ help:
 	@echo "clean              : Full cleanup including containers"
 	@echo "ruff_check         : Clean + run ruff lint check"
 	@echo "ruff_fix           : Clean + run ruff lint with auto-fix"
+	@echo "ruff_format        : Clean + reformat the code with ruff format (manual only, not in CI)"
 	@echo "test               : Clean + ruff check + run tests. Use make test k=<name> for specific test"
 	@echo "cov                : Clean + ruff check + tests with coverage report (fresh build)"
 
@@ -60,9 +61,16 @@ ruff_check: clean-artifacts
 	@docker compose -f docker-compose-test.yml build $(APP_NAME_TEST)
 	@docker compose -f docker-compose-test.yml run --rm $(APP_NAME_TEST) ruff check .
 
+# Run by hand when you want it; nothing else (CI included) reformats the code.
+RUFF_WRITE = docker compose -f docker-compose-test.yml run --rm -v $(CURDIR):/email_classifier --user $(shell id -u):$(shell id -g) $(APP_NAME_TEST)
+
 ruff_fix: clean-artifacts
 	@docker compose -f docker-compose-test.yml build $(APP_NAME_TEST)
-	@docker compose -f docker-compose-test.yml run --rm -v $(CURDIR):/email_classifier --user $(shell id -u):$(shell id -g) $(APP_NAME_TEST) ruff check --fix .
+	@$(RUFF_WRITE) ruff check --fix .
+
+ruff_format: clean-artifacts
+	@docker compose -f docker-compose-test.yml build $(APP_NAME_TEST)
+	@$(RUFF_WRITE) ruff format .
 
 ### TESTING
 test: clean-artifacts
