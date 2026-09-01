@@ -11,7 +11,7 @@ from openai.types.chat import (
 
 from app.config import settings
 from app.helpers.dto import ClassificationResult, ParsedEmail
-from app.helpers.enums import EmailCategoryEnum
+from app.helpers.enums import EmailCategoryEnum, LanguageEnum
 
 CLASSIFY_TOOL = ChatCompletionToolParam(
     type="function",
@@ -54,6 +54,12 @@ SYSTEM_PROMPT = (
     "urgency language, and requests for sensitive information."
 )
 
+UKRAINIAN_INSTRUCTION = (
+    " Write the `reasoning` field and every item of the `signals` array in Ukrainian. "
+    "Only those two fields are translated: the `category` value must stay one of the "
+    "English enum values listed in the tool schema."
+)
+
 REVIEW_PROMPT = (
     "You are a senior email security analyst performing a second review. "
     "The initial classification was uncertain. Be extra critical. "
@@ -78,6 +84,22 @@ def get_client() -> AsyncOpenAI:
 
     """
     return AsyncOpenAI(api_key=settings.openai_api_key)
+
+
+def _system_prompt(base_prompt: str, language: LanguageEnum) -> str:
+    """Return the system prompt adjusted for the requested output language.
+
+    Args:
+        base_prompt: Prompt for the pass being run (first or review).
+        language: Language the LLM-written fields should be produced in.
+
+    Returns:
+        The prompt as-is for English, or with the Ukrainian instruction appended.
+
+    """
+    if language is LanguageEnum.UK:
+        return base_prompt + UKRAINIAN_INSTRUCTION
+    return base_prompt
 
 
 def _build_user_message(email: ParsedEmail) -> str:
@@ -127,13 +149,17 @@ async def _call_openai(user_message: str, system_prompt: str) -> dict:
     return json.loads(tool_calls[0].function.arguments)
 
 
-async def classify_email(parsed_email: ParsedEmail) -> ClassificationResult:
+async def classify_email(
+    parsed_email: ParsedEmail,
+    language: LanguageEnum = LanguageEnum.EN,
+) -> ClassificationResult:
     """Classify an email using OpenAI tool use.
 
     Performs a second pass with stricter analysis if confidence is below threshold.
 
     Args:
         parsed_email: Parsed email DTO.
+        language: Language for the reasoning and signals; the category stays English.
 
     Returns:
         ClassificationResult with category, confidence, reasoning, signals, reviewed.
@@ -141,11 +167,11 @@ async def classify_email(parsed_email: ParsedEmail) -> ClassificationResult:
     """
     user_message = _build_user_message(parsed_email)
 
-    result = await _call_openai(user_message, SYSTEM_PROMPT)
+    result = await _call_openai(user_message, _system_prompt(SYSTEM_PROMPT, language))
     reviewed = False
 
     if result.get("confidence", 0) <= settings.confidence_threshold:
-        result = await _call_openai(user_message, REVIEW_PROMPT)
+        result = await _call_openai(user_message, _system_prompt(REVIEW_PROMPT, language))
         reviewed = True
 
     return ClassificationResult(

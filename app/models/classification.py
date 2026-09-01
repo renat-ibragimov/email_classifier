@@ -6,7 +6,7 @@ from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database.base import Base
-from app.helpers.enums import ClassificationStatusEnum, EmailCategoryEnum
+from app.helpers.enums import ClassificationStatusEnum, EmailCategoryEnum, LanguageEnum
 
 
 class ClassificationRecord(Base):
@@ -60,6 +60,13 @@ class ClassificationRecord(Base):
         ARRAY(String),
         nullable=True,
         comment="Specific signals in the email that support the classification",
+    )
+    language: Mapped[str] = mapped_column(
+        String(2),
+        nullable=False,
+        default=LanguageEnum.EN.value,
+        server_default=LanguageEnum.EN.value,
+        comment="Language the reasoning and signals are written in: en / uk",
     )
     reviewed: Mapped[bool] = mapped_column(
         Boolean,

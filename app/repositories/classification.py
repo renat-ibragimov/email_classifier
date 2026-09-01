@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.helpers.enums import LanguageEnum
 from app.models.classification import ClassificationRecord
 
 
@@ -41,7 +42,11 @@ class ClassificationRepository:
         )
         return result.scalar_one_or_none()
 
-    async def create(self, content_hash: str) -> tuple[ClassificationRecord, bool]:
+    async def create(
+        self,
+        content_hash: str,
+        language: LanguageEnum = LanguageEnum.EN,
+    ) -> tuple[ClassificationRecord, bool]:
         """Insert a new pending record, handling concurrent-duplicate races.
 
         On unique-constraint conflict the session is rolled back and the
@@ -49,6 +54,7 @@ class ClassificationRepository:
 
         Args:
             content_hash: SHA-256 hex digest used as the dedup key.
+            language: Language the classification was requested in.
 
         Returns:
             Tuple of (record, is_new). is_new=True for a freshly inserted row,
@@ -60,7 +66,7 @@ class ClassificationRepository:
                 still be there.
 
         """
-        record = ClassificationRecord(content_hash=content_hash)
+        record = ClassificationRecord(content_hash=content_hash, language=language.value)
         self.session.add(record)
 
         try:

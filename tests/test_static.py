@@ -12,6 +12,8 @@ EXPECTED_SAMPLES = {
     "hard_p.eml",
 }
 
+LANGUAGES = {"en", "uk"}
+
 
 async def _get(path):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -42,8 +44,10 @@ class TestSamples:
 
         assert {sample["filename"] for sample in samples} == EXPECTED_SAMPLES
         for sample in samples:
-            assert sample["label"]
-            assert sample["description"]
+            assert set(sample["label"]) == LANGUAGES
+            assert set(sample["description"]) == LANGUAGES
+            assert all(sample["label"][language] for language in LANGUAGES)
+            assert all(sample["description"][language] for language in LANGUAGES)
 
     async def test_every_listed_sample_is_downloadable(self):
         manifest = json.loads((await _get("/static/samples/samples.json")).content)

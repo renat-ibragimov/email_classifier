@@ -13,10 +13,11 @@ Each email is assigned one of six categories (**spam**, **phishing**, **newslett
 - `GET /health` - liveness probe, returns `{"status": "ok"}`
 - **Demo frontend** at `/` - a single static page (no build step, no framework) to upload an `.eml`, paste raw email text, or classify one of the bundled samples
 - **Rate limiting** on `POST /classify/`: 10 requests per minute per client IP (in-memory, via `slowapi`), keyed off `X-Forwarded-For` so it works behind a reverse proxy
-- **Deduplication** by SHA-256 of raw `.eml` bytes; the same file uploaded twice returns the cached result with `200` instead of re-running the LLM
+- **Deduplication** by SHA-256 of raw `.eml` bytes plus the requested language; the same file uploaded twice in the same language returns the cached result with `200` instead of re-running the LLM
 - **Two-pass classification**: a stricter "senior analyst" review runs when first-pass confidence is below the threshold (`reviewed=true` in the response)
 - **OpenAI tool use** is forced via `tool_choice` so the model can only return a valid category from the enum
 - **Concurrent-safe**: uploads with the same content racing in parallel are coalesced via a unique constraint and a `IntegrityError` retry; only one classification runs
+- **Two languages**: English and Ukrainian, both in the UI and in the LLM-written parts of the answer (see [Languages](#languages))
 
 ## Tech stack
 
@@ -62,6 +63,20 @@ make stop
 | `OPENAI_MODEL` | no | `gpt-4o-mini` | |
 | `CONFIDENCE_THRESHOLD` | no | `0.85` | First-pass confidence `<=` this value triggers a second review pass |
 
+## Languages
+
+The demo is available in **English** (default) and **Ukrainian**. The switcher sits in the sidebar header (`EN | UK`); the choice is remembered in `localStorage` and applied on load.
+
+On the API, `POST /classify/` takes an optional `language` form field — `en` (default) or `uk`; anything else is rejected with `422`. It selects the language of the LLM-written fields, `reasoning` and `signals`. The `category` value always stays one of the English enum members, and it is echoed back in the response as `language`.
+
+```bash
+curl -X POST http://localhost:8000/classify/ \
+     -F "file=@tests/fixtures/spam.eml" \
+     -F "language=uk"
+```
+
+Deduplication is scoped to the language: the content hash covers the file bytes *and* the language, so the same `.eml` asked for as `en` and then as `uk` yields two records — each classified once — instead of the second request getting the first one's reasoning back.
+
 ## Trying the API
 
 Sample `.eml` files for manual testing live in [`tests/fixtures/`](tests/fixtures/):
@@ -94,7 +109,7 @@ curl http://localhost:8000/classify/<record-id>/
 | --- | --- | --- |
 | `POST /classify/` | `201 Created` | New file, classification performed |
 | | `200 OK` | Duplicate of an already-classified file |
-| | `422 Unprocessable Content` | Wrong extension, file > 10 MB, or missing `From` header |
+| | `422 Unprocessable Content` | Wrong extension, file > 10 MB, missing `From` header, or unknown `language` |
 | | `429 Too Many Requests` | More than 10 requests in a minute from the same client IP |
 | | `500 Internal Server Error` | LLM call failed; record is persisted with `status=failed` and can be retried by re-uploading |
 | `GET /classify/{id}/` | `200 OK` | Record found |
@@ -143,7 +158,7 @@ app/
 │   ├── classification_service.py   Orchestration: dedup, parse-then-classify-then-persist
 │   ├── classifier.py               OpenAI tool-use, two-pass review logic
 │   ├── parser.py                   .eml → ParsedEmail DTO
-│   └── hasher.py                   SHA-256 over raw bytes
+│   └── hasher.py                   SHA-256 over raw bytes + language
 ├── repositories/
 │   └── classification.py           DB access + IntegrityError race handling
 ├── models/                         SQLAlchemy ORM
@@ -190,9 +205,10 @@ Tests run in a dedicated Docker Compose stack (`docker-compose-test.yml`) with a
 - **Unit-level**: `hasher`, `parser`, `classifier` (with the cached OpenAI client factory patched), `classification_service` (with mocked repo + classifier), rate-limit client-IP resolution, helper DTOs and enums.
 - **Repository integration**: real async sessions against `test_db`, covers `find_by_id`, `find_by_hash`, `create` (including the `IntegrityError` race and the defensive `RuntimeError` guard for the impossible "row disappeared" state), and `save`.
 - **Router integration**: ASGI in-process via `httpx.AsyncClient` + `ASGITransport`. Tests exercise the full DI chain (`get_session` → `get_repo` → service → repo) so the `AsyncSession` lifecycle is covered without overrides; only `classify_email` is patched to avoid real OpenAI calls. Rate-limit counters are reset between tests by an autouse fixture, and a dedicated test drives `POST /classify/` past the limit to assert the `429`.
+- **Languages**: the default (`en`), the Ukrainian instruction reaching both prompt passes, language-scoped dedup (same file as `en` then `uk` → two `201`s), and `422` on an unknown language.
 
 ```bash
 make cov
 ```
 
-Current coverage: **100%** across 25 modules (276 statements), 62 tests.
+Current coverage: **100%** across 24 modules (296 statements), 77 tests.

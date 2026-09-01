@@ -2,11 +2,12 @@ import logging
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, status
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, UploadFile, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.session import get_session
+from app.helpers.enums import LanguageEnum
 from app.rate_limit import CLASSIFY_RATE_LIMIT, limiter
 from app.repositories.classification import ClassificationRepository
 from app.schemas.classification import ClassificationResponse
@@ -34,6 +35,15 @@ RepoDep = Annotated[ClassificationRepository, Depends(get_repo)]
     response_model=ClassificationResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Classify an .eml file",
+    description=(
+        "Upload an `.eml` file as multipart form data.\n\n"
+        "The optional `language` form field selects the language of the LLM-written parts "
+        "of the answer (`reasoning` and `signals`): `en` (default) or `uk`. Any other value "
+        "is rejected with `422`. The `category` value is always one of the English enum "
+        "members regardless of the language.\n\n"
+        "Deduplication is scoped to the language: the same file requested as `en` and then "
+        "as `uk` produces two records, each classified once."
+    ),
     responses={
         status.HTTP_200_OK: {
             "model": ClassificationResponse,
@@ -55,8 +65,9 @@ async def post_classify(
     request: Request,  # ruff: ignore[unused-function-argument] (slowapi reads it)
     file: UploadFile,
     repo: RepoDep,
+    language: Annotated[LanguageEnum, Form(description="Language of the reasoning and signals")] = LanguageEnum.EN,
 ) -> JSONResponse:
-    """Accept an .eml file, classify it using LLM, and store the result."""
+    """Accept an .eml file, classify it using LLM in the requested language, and store the result."""
     if not file.filename or not file.filename.endswith(".eml"):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -73,7 +84,7 @@ async def post_classify(
     service = ClassificationService(repo)
 
     try:
-        record, is_new = await service.classify(content)
+        record, is_new = await service.classify(content, language)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(e)) from e
     except Exception as e:

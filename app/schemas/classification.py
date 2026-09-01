@@ -4,7 +4,7 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 from app.config import settings
-from app.helpers.enums import ClassificationStatusEnum, EmailCategoryEnum
+from app.helpers.enums import ClassificationStatusEnum, EmailCategoryEnum, LanguageEnum
 
 
 class ClassificationResponse(BaseModel):
@@ -16,6 +16,7 @@ class ClassificationResponse(BaseModel):
     confidence: float | None = Field(description="Model confidence score from 0.0 to 1.0")
     reasoning: str | None = Field(description="LLM explanation of why this category was chosen")
     signals: list[str] | None = Field(description="Specific signals that support the classification")
+    language: LanguageEnum = Field(description="Language of the reasoning and signals: en / uk")
     reviewed: bool = Field(description="True if a second LLM pass was performed due to low confidence")
     created_at: datetime = Field(description="When the record was first stored")
     model: str = Field(

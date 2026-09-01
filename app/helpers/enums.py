@@ -27,3 +27,10 @@ class EmailCategoryEnum(PgStrEnum):
     TRANSACTIONAL = "transactional"
     PERSONAL = "personal"
     AUTOMATED = "automated"
+
+
+class LanguageEnum(PgStrEnum):
+    """Languages the UI and the LLM-written parts of a result are available in."""
+
+    EN = "en"
+    UK = "uk"

@@ -2,28 +2,43 @@
   "samples": [
     {
       "filename": "personal.eml",
-      "label": "Personal",
-      "description": "Casual note between friends about dinner plans"
+      "label": { "en": "Personal", "uk": "Особистий" },
+      "description": {
+        "en": "Casual note between friends about dinner plans",
+        "uk": "Дружня записка про плани на вечерю"
+      }
     },
     {
       "filename": "newsletter.eml",
-      "label": "Newsletter",
-      "description": "Weekly tech digest with an unsubscribe footer"
+      "label": { "en": "Newsletter", "uk": "Розсилка" },
+      "description": {
+        "en": "Weekly tech digest with an unsubscribe footer",
+        "uk": "Щотижневий технодайджест із посиланням на відписку"
+      }
     },
     {
       "filename": "transactional.eml",
-      "label": "Transactional",
-      "description": "Order shipping confirmation with a tracking number"
+      "label": { "en": "Transactional", "uk": "Транзакційний" },
+      "description": {
+        "en": "Order shipping confirmation with a tracking number",
+        "uk": "Підтвердження відправлення замовлення з номером для відстеження"
+      }
     },
     {
       "filename": "spam.eml",
-      "label": "Spam",
-      "description": "Gift card giveaway with urgency and a claim link"
+      "label": { "en": "Spam", "uk": "Спам" },
+      "description": {
+        "en": "Gift card giveaway with urgency and a claim link",
+        "uk": "Розіграш подарункової картки з тиском на терміновість і посиланням"
+      }
     },
     {
       "filename": "hard_p.eml",
-      "label": "Tricky phishing",
-      "description": "Tricky phishing: internal-looking password reset"
+      "label": { "en": "Tricky phishing", "uk": "Хитрий фішинг" },
+      "description": {
+        "en": "Tricky phishing: internal-looking password reset",
+        "uk": "Хитрий фішинг: скидання пароля, що вдає внутрішній лист"
+      }
     }
   ]
 }

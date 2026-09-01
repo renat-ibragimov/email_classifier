@@ -5,6 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Email Classifier</title>
 <meta name="description" content="Upload an .eml file and see how an LLM classifies it: category, confidence, reasoning and signals.">
+<script>
+/* Resolve the language before the sheet is parsed so <html lang> and the first
+   paint already agree with the stored choice. */
+(function () {
+  var stored = null;
+  try { stored = window.localStorage.getItem("ec-lang"); } catch (error) { stored = null; }
+  window.__EC_LANG__ = stored === "uk" ? "uk" : "en";
+  document.documentElement.lang = window.__EC_LANG__;
+})();
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Playfair+Display:wght@500;600&display=swap" rel="stylesheet">
@@ -110,15 +120,47 @@ a { color: var(--ink-blue); }
 
 /* ---------- sidebar ---------- */
 
+.brand-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--ink);
+}
+
 .brand-title {
   margin: 0;
   font-size: 12px;
   font-weight: 600;
   letter-spacing: .18em;
   text-transform: uppercase;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--ink);
 }
+
+/* ---------- language switcher ---------- */
+
+.lang-switch { display: flex; align-items: baseline; gap: 7px; flex: none; }
+
+.lang {
+  appearance: none;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  padding: 0 0 1px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: .14em;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color var(--t), border-color var(--t);
+}
+
+.lang:hover { color: var(--ink); }
+.lang[aria-pressed="true"] { color: var(--ink-blue); border-bottom-color: var(--ink-blue); }
+.lang:focus-visible { outline: 1px solid var(--ink-blue); outline-offset: 3px; }
+
+.lang-sep { font-size: 11px; color: var(--rule-strong); user-select: none; }
 
 .brand-tag {
   display: inline-block;
@@ -569,6 +611,13 @@ textarea::placeholder { color: var(--muted); }
   }
 
   .sidebar { position: static; }
+
+  /* The sidebar collapses into a compact header here; keep the switcher on the
+     same line as the brand and give it a finger-sized hit area. */
+  .brand-row { padding-bottom: 8px; }
+  .lang-switch { gap: 9px; }
+  .lang { font-size: 12px; padding: 4px 2px 3px; }
+
   .hero { font-size: 32px; margin-top: 20px; }
   .hero-rule { margin: 14px 0 12px; }
   .lede-more { display: none; }
@@ -602,27 +651,34 @@ textarea::placeholder { color: var(--muted); }
 <div class="layout">
 
   <aside class="sidebar">
-    <p class="brand-title">Email Classifier</p>
-    <span class="brand-tag">LLM-powered</span>
+    <div class="brand-row">
+      <p class="brand-title" id="brand-title">Email Classifier</p>
+      <div class="lang-switch" id="lang-switch" role="group" aria-label="Language">
+        <button class="lang" type="button" data-lang="en" aria-pressed="true">EN</button>
+        <span class="lang-sep" aria-hidden="true">|</span>
+        <button class="lang" type="button" data-lang="uk" aria-pressed="false">UK</button>
+      </div>
+    </div>
+    <span class="brand-tag" id="brand-tag">LLM-powered</span>
 
-    <h1 class="hero">Understand every email.</h1>
+    <h1 class="hero" id="hero">Understand every email.</h1>
     <div class="hero-rule"></div>
-    <p class="lede"><span>Upload an .eml file and a language model sorts it into one of six categories.</span> <span class="lede-more">Every verdict carries a confidence score, plain-language reasoning, and the signals it was built on.</span></p>
+    <p class="lede"><span id="lede-main">Upload an .eml file and a language model sorts it into one of six categories.</span> <span class="lede-more" id="lede-more">Every verdict carries a confidence score, plain-language reasoning, and the signals it was built on.</span></p>
 
     <div class="demo-block">
-      <span class="label">Demo project</span>
+      <span class="label" id="demo-label">Demo project</span>
       <p class="demo-stack">FastAPI · OpenAI</p>
-      <a class="ghost-btn" href="https://github.com/renat-ibragimov/email_classifier" target="_blank" rel="noopener noreferrer">View on GitHub →</a>
+      <a class="ghost-btn" id="github-btn" href="https://github.com/renat-ibragimov/email_classifier" target="_blank" rel="noopener noreferrer">View on GitHub →</a>
     </div>
   </aside>
 
   <div class="main">
 
     <section class="sheet" id="card">
-      <div class="drop-overlay">Drop the .eml file to classify</div>
+      <div class="drop-overlay" id="drop-overlay">Drop the .eml file to classify</div>
 
       <section class="block">
-        <h2 class="section-title">1. Input</h2>
+        <h2 class="section-title" id="title-input">1. Input</h2>
 
         <div class="tabs" role="tablist" aria-label="Input mode">
           <button class="tab" id="tab-upload" role="tab" aria-selected="true" aria-controls="panel-upload" type="button">Upload .eml file</button>
@@ -636,7 +692,7 @@ textarea::placeholder { color: var(--muted); }
               <path d="M18.5 1v10.5H29"/>
               <path d="M7 20h16M7 26h16M7 32h10"/>
             </svg>
-            <span class="filedrop-main">Drag &amp; drop your .eml file here or <u>browse</u></span>
+            <span class="filedrop-main" id="filedrop-main">Drag &amp; drop your .eml file here or <u id="filedrop-browse">browse</u></span>
             <span class="filedrop-name" id="filename" hidden></span>
           </div>
           <input type="file" id="fileinput" accept=".eml,message/rfc822">
@@ -651,11 +707,11 @@ From: someone@example.com
 Subject: Invoice overdue
 
 ...or just the body text on its own."></textarea>
-          <p class="field-hint">Missing From / Subject headers are filled in with placeholders before the .eml is sent.</p>
+          <p class="field-hint" id="paste-hint">Missing From / Subject headers are filled in with placeholders before the .eml is sent.</p>
         </div>
 
         <div class="actions">
-          <span class="actions-note">Max file size: 10 MB</span>
+          <span class="actions-note" id="actions-note">Max file size: 10 MB</span>
           <button class="btn" id="submit" type="button">Classify email →</button>
         </div>
       </section>
@@ -667,7 +723,7 @@ Subject: Invoice overdue
 
       <section class="block">
         <div class="section-head">
-          <h2 class="section-title">2. Result</h2>
+          <h2 class="section-title" id="title-result">2. Result</h2>
           <button class="raw-toggle" id="raw-toggle" type="button" aria-expanded="false" aria-controls="raw-json" disabled>View raw JSON { }</button>
         </div>
         <pre class="raw-json" id="raw-json" hidden></pre>
@@ -675,7 +731,7 @@ Subject: Invoice overdue
       </section>
     </section>
 
-    <p class="footer">Built by <a href="https://github.com/renat-ibragimov" target="_blank" rel="noopener noreferrer">Renat Ibragimov</a></p>
+    <p class="footer"><span id="footer-built">Built by</span> <a href="https://github.com/renat-ibragimov" target="_blank" rel="noopener noreferrer">Renat Ibragimov</a></p>
 
   </div>
 </div>
@@ -683,6 +739,179 @@ Subject: Invoice overdue
 <script>
 (function () {
   "use strict";
+
+  var LANG_KEY = "ec-lang";
+  var DEFAULT_LANG = "en";
+
+  /* ---------- dictionary ---------- */
+
+  var I18N = {
+    en: {
+      docTitle: "Email Classifier",
+      brandTitle: "Email Classifier",
+      brandTag: "LLM-powered",
+      langAria: "Language",
+      hero: "Understand every email.",
+      ledeMain: "Upload an .eml file and a language model sorts it into one of six categories.",
+      ledeMore: "Every verdict carries a confidence score, plain-language reasoning, and the signals it was built on.",
+      demoLabel: "Demo project",
+      github: "View on GitHub →",
+      dropOverlay: "Drop the .eml file to classify",
+      titleInput: "1. Input",
+      titleResult: "2. Result",
+      tabUpload: "Upload .eml file",
+      tabPaste: "Paste email content",
+      filedropAria: "Choose an .eml file",
+      filedropMain: "Drag & drop your .eml file here or ",
+      filedropBrowse: "browse",
+      pasteLabel: "Email text",
+      pastePlaceholder: "Paste the email here.\n\nYou can include headers:\nFrom: someone@example.com\nSubject: Invoice overdue\n\n...or just the body text on its own.",
+      pasteHint: "Missing From / Subject headers are filled in with placeholders before the .eml is sent.",
+      actionsNote: "Max file size: 10 MB",
+      submit: "Classify email →",
+      submitBusy: "Classifying…",
+      samplesTitle: "Try a sample",
+      rawToggle: "View raw JSON { }",
+      placeholder: "No document classified yet",
+      loading: "Classifying — the model usually answers within a few seconds.",
+      labelCategory: "Category",
+      labelReason: "Reason",
+      labelSignals: "Signals",
+      labelConfidence: "Confidence",
+      labelProcessedAt: "Processed at",
+      labelEmailSize: "Email size",
+      labelModel: "Model",
+      stampReviewed: "Re-examined",
+      duplicateNote: "Already classified earlier — showing stored result.",
+      rateTitle: "Rate limit reached",
+      rateBody: "This demo accepts 10 classifications per minute. Give it a minute and try again.",
+      rejectedTitle: "That file was rejected",
+      rejectedBody: "The file is not a valid .eml.",
+      failedTitle: "Classification failed",
+      failedBody: "Something went wrong on the server. Please try again.",
+      networkTitle: "Network error",
+      networkBody: "Could not reach the API. Check your connection and try again.",
+      emptyPasteTitle: "Nothing to classify",
+      emptyPasteBody: "Paste some email text first.",
+      noFileTitle: "No file selected",
+      noFileBody: "Choose an .eml file or drop one onto the sheet.",
+      sampleErrorTitle: "Could not load the sample",
+      sampleErrorBody: "Try picking another one.",
+      samplesUnavailable: "Samples are unavailable right now.",
+      footerBuilt: "Built by",
+      detailWrongExtension: "The file is not a valid .eml.",
+      detailTooLarge: "The file is larger than 10 MB.",
+      detailNoFrom: "The file is not a valid .eml: the From header is missing."
+    },
+    uk: {
+      docTitle: "Класифікатор листів",
+      brandTitle: "Класифікатор листів",
+      brandTag: "На базі LLM",
+      langAria: "Мова",
+      hero: "Зрозумій кожен лист.",
+      ledeMain: "Завантажте .eml файл — мовна модель віднесе його до однієї з шести категорій.",
+      ledeMore: "Кожен вердикт має оцінку впевненості, пояснення звичайною мовою та перелік ознак, на яких він побудований.",
+      demoLabel: "Демопроєкт",
+      github: "Дивитись на GitHub →",
+      dropOverlay: "Відпустіть .eml файл для класифікації",
+      titleInput: "1. Вхідні дані",
+      titleResult: "2. Результат",
+      tabUpload: "Завантажити .eml файл",
+      tabPaste: "Вставити текст листа",
+      filedropAria: "Оберіть .eml файл",
+      filedropMain: "Перетягніть .eml файл сюди або ",
+      filedropBrowse: "оберіть",
+      pasteLabel: "Текст листа",
+      pastePlaceholder: "Вставте лист сюди.\n\nМожна разом із заголовками:\nFrom: someone@example.com\nSubject: Рахунок прострочено\n\n...або лише текст листа.",
+      pasteHint: "Відсутні заголовки From / Subject буде замінено заглушками перед надсиланням .eml.",
+      actionsNote: "Максимальний розмір файлу: 10 МБ",
+      submit: "Класифікувати →",
+      submitBusy: "Класифікую…",
+      samplesTitle: "Спробуйте зразок",
+      rawToggle: "Показати сирий JSON { }",
+      placeholder: "Ще жодного документа не класифіковано",
+      loading: "Класифікую — зазвичай модель відповідає за кілька секунд.",
+      labelCategory: "Категорія",
+      labelReason: "Обґрунтування",
+      labelSignals: "Ознаки",
+      labelConfidence: "Впевненість",
+      labelProcessedAt: "Оброблено",
+      labelEmailSize: "Розмір листа",
+      labelModel: "Модель",
+      stampReviewed: "Перевірено вдруге",
+      duplicateNote: "Цей лист уже класифіковано — показано збережений результат.",
+      rateTitle: "Перевищено ліміт запитів",
+      rateBody: "Демо приймає 10 класифікацій на хвилину. Зачекайте хвилину та спробуйте знову.",
+      rejectedTitle: "Файл відхилено",
+      rejectedBody: "Файл не є коректним .eml.",
+      failedTitle: "Класифікація не вдалася",
+      failedBody: "На сервері сталася помилка. Спробуйте ще раз.",
+      networkTitle: "Помилка мережі",
+      networkBody: "Не вдалося звʼязатися з API. Перевірте зʼєднання та спробуйте знову.",
+      emptyPasteTitle: "Нічого класифікувати",
+      emptyPasteBody: "Спершу вставте текст листа.",
+      noFileTitle: "Файл не обрано",
+      noFileBody: "Оберіть .eml файл або перетягніть його на аркуш.",
+      sampleErrorTitle: "Не вдалося завантажити зразок",
+      sampleErrorBody: "Спробуйте інший.",
+      samplesUnavailable: "Зразки зараз недоступні.",
+      footerBuilt: "Створив",
+      detailWrongExtension: "Файл не є коректним .eml.",
+      detailTooLarge: "Файл більший за 10 МБ.",
+      detailNoFrom: "Файл не є коректним .eml: відсутній заголовок From."
+    }
+  };
+
+  /* Category and status labels are display-only; the raw JSON keeps the English
+     enum value the API actually returned. */
+  var CATEGORY_NAMES = {
+    en: {
+      phishing: "Phishing",
+      spam: "Spam",
+      newsletter: "Newsletter",
+      transactional: "Transactional",
+      personal: "Personal",
+      automated: "Automated"
+    },
+    uk: {
+      phishing: "ФІШИНГ",
+      spam: "СПАМ",
+      newsletter: "РОЗСИЛКА",
+      transactional: "ТРАНЗАКЦІЙНИЙ",
+      personal: "ОСОБИСТИЙ",
+      automated: "АВТОМАТИЧНИЙ"
+    }
+  };
+
+  var STATUS_NAMES = {
+    en: { pending: "Pending", classified: "Classified", failed: "Failed" },
+    uk: { pending: "В черзі", classified: "Класифіковано", failed: "Помилка" }
+  };
+
+  var UNKNOWN_CATEGORY = { en: "Unknown", uk: "Невідомо" };
+
+  /* Server-side 422 details are English; map the known ones onto dictionary keys. */
+  var DETAIL_KEYS = {
+    "File must be a valid .eml file": "detailWrongExtension",
+    "File too large, maximum size is 10 MB": "detailTooLarge",
+    "File is not a valid .eml: missing From header": "detailNoFrom"
+  };
+
+  /* Month names are spelled out here rather than taken from Intl so the
+     rendered date is byte-identical on every device and locale setting. */
+  var MONTHS = {
+    en: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
+    uk: ["січ.", "лют.", "бер.", "квіт.", "трав.", "черв.", "лип.", "серп.", "вер.", "жовт.", "лист.", "груд."]
+  };
+
+  var lang = window.__EC_LANG__ === "uk" ? "uk" : DEFAULT_LANG;
+
+  function t(key) {
+    var table = I18N[lang] || I18N[DEFAULT_LANG];
+    return table[key] !== undefined ? table[key] : I18N[DEFAULT_LANG][key];
+  }
+
+  /* ---------- static assets of the page ---------- */
 
   var CATEGORY_COLORS = {
     phishing: "var(--cat-phishing)",
@@ -716,10 +945,16 @@ Subject: Invoice overdue
   var status = document.getElementById("status");
   var rawToggle = document.getElementById("raw-toggle");
   var rawJson = document.getElementById("raw-json");
+  var langSwitch = document.getElementById("lang-switch");
 
   var selectedFile = null;
   var busy = false;
   var lastSize = null;
+  var samples = [];
+
+  /* The current view is kept as a thunk so switching language re-renders it
+     from the data already in hand, without re-running any classification. */
+  var renderCurrentView = function () {};
 
   function el(tag, className, text) {
     var node = document.createElement(tag);
@@ -727,6 +962,67 @@ Subject: Invoice overdue
     if (text !== undefined) { node.textContent = text; }
     return node;
   }
+
+  function setText(id, value) {
+    var node = document.getElementById(id);
+    if (node) { node.textContent = value; }
+  }
+
+  /* ---------- language ---------- */
+
+  function applyStaticStrings() {
+    document.documentElement.lang = lang;
+    document.title = t("docTitle");
+
+    setText("brand-title", t("brandTitle"));
+    setText("brand-tag", t("brandTag"));
+    setText("hero", t("hero"));
+    setText("lede-main", t("ledeMain"));
+    setText("lede-more", t("ledeMore"));
+    setText("demo-label", t("demoLabel"));
+    setText("github-btn", t("github"));
+    setText("drop-overlay", t("dropOverlay"));
+    setText("title-input", t("titleInput"));
+    setText("title-result", t("titleResult"));
+    setText("samples-label", t("samplesTitle"));
+    setText("paste-hint", t("pasteHint"));
+    setText("actions-note", t("actionsNote"));
+    setText("footer-built", t("footerBuilt"));
+
+    tabUpload.textContent = t("tabUpload");
+    tabPaste.textContent = t("tabPaste");
+
+    filedrop.setAttribute("aria-label", t("filedropAria"));
+    document.getElementById("filedrop-main").firstChild.nodeValue = t("filedropMain");
+    setText("filedrop-browse", t("filedropBrowse"));
+
+    pastebox.placeholder = t("pastePlaceholder");
+    document.querySelector("label[for=\"pastebox\"]").textContent = t("pasteLabel");
+
+    rawToggle.textContent = t("rawToggle");
+    langSwitch.setAttribute("aria-label", t("langAria"));
+
+    submit.textContent = busy ? t("submitBusy") : t("submit");
+
+    Array.prototype.forEach.call(langSwitch.querySelectorAll(".lang"), function (button) {
+      button.setAttribute("aria-pressed", String(button.getAttribute("data-lang") === lang));
+    });
+  }
+
+  function setLanguage(next) {
+    if (next !== "en" && next !== "uk") { return; }
+    if (next === lang) { return; }
+    lang = next;
+    try { window.localStorage.setItem(LANG_KEY, lang); } catch (error) { /* private mode */ }
+    applyStaticStrings();
+    renderSamples();
+    renderCurrentView();
+  }
+
+  langSwitch.addEventListener("click", function (event) {
+    var button = event.target.closest(".lang");
+    if (button) { setLanguage(button.getAttribute("data-lang")); }
+  });
 
   /* ---------- tabs ---------- */
 
@@ -862,37 +1158,54 @@ Subject: Invoice overdue
     return (bytes / (1024 * 1024)).toFixed(2) + " MB";
   }
 
+  function pad2(value) {
+    return value < 10 ? "0" + value : String(value);
+  }
+
+  /* "01 Sep 2026, 11:25" / "01 вер. 2026, 11:25", local timezone. Built by hand
+     rather than via toLocaleString so the output does not drift per device. */
   function formatDate(value) {
     if (!value) { return "—"; }
     var date = new Date(value);
     if (isNaN(date.getTime())) { return "—"; }
-    return date.toLocaleString(undefined, {
-      year: "numeric", month: "short", day: "2-digit",
-      hour: "2-digit", minute: "2-digit"
-    });
+    return pad2(date.getDate()) + " " + MONTHS[lang][date.getMonth()] + " " + date.getFullYear() +
+      ", " + pad2(date.getHours()) + ":" + pad2(date.getMinutes());
+  }
+
+  function categoryName(category) {
+    var names = CATEGORY_NAMES[lang] || CATEGORY_NAMES[DEFAULT_LANG];
+    return names[category] || UNKNOWN_CATEGORY[lang] || UNKNOWN_CATEGORY[DEFAULT_LANG];
+  }
+
+  function statusName(value) {
+    var names = STATUS_NAMES[lang] || STATUS_NAMES[DEFAULT_LANG];
+    return names[value] || value;
   }
 
   /* ---------- rendering ---------- */
 
   function showPlaceholder() {
+    renderCurrentView = showPlaceholder;
     status.innerHTML = "";
-    status.appendChild(el("div", "placeholder", "No document classified yet"));
+    status.appendChild(el("div", "placeholder", t("placeholder")));
     setRaw(null);
   }
 
   function showLoading() {
+    renderCurrentView = showLoading;
     status.innerHTML = "";
     var box = el("div", "loading");
     box.appendChild(el("div", "spinner"));
-    box.appendChild(el("span", null, "Classifying — the model usually answers within a few seconds."));
+    box.appendChild(el("span", null, t("loading")));
     status.appendChild(box);
   }
 
-  function showAlert(title, body, variant) {
+  function showAlert(titleKey, bodyKey, variant) {
+    renderCurrentView = function () { showAlert(titleKey, bodyKey, variant); };
     status.innerHTML = "";
     var box = el("div", "alert " + (variant === "warn" ? "warn" : "error"));
-    box.appendChild(el("p", "alert-title", title));
-    box.appendChild(el("p", "alert-body", body));
+    box.appendChild(el("p", "alert-title", t(titleKey)));
+    box.appendChild(el("p", "alert-body", t(bodyKey)));
     status.appendChild(box);
   }
 
@@ -904,6 +1217,8 @@ Subject: Invoice overdue
   }
 
   function showResult(data, isDuplicate) {
+    renderCurrentView = function () { showResult(data, isDuplicate); };
+
     var color = CATEGORY_COLORS[data.category] || "var(--cat-automated)";
     var confidence = typeof data.confidence === "number" ? data.confidence : 0;
 
@@ -913,27 +1228,27 @@ Subject: Invoice overdue
     var result = el("div", "result");
 
     if (isDuplicate) {
-      result.appendChild(el("p", "note", "Already classified earlier — showing stored result."));
+      result.appendChild(el("p", "note", t("duplicateNote")));
     }
 
     var grid = el("div", "result-grid");
     var mainCol = el("div", "result-main");
 
-    mainCol.appendChild(el("span", "label", "Category"));
+    mainCol.appendChild(el("span", "label", t("labelCategory")));
 
     var stampArea = el("div", "stamp-area");
-    var stamp = el("span", "stamp", data.category || "unknown");
+    var stamp = el("span", "stamp", categoryName(data.category));
     stamp.style.setProperty("--stamp-color", color);
     stamp.style.setProperty("--worn", WORN);
     stampArea.appendChild(stamp);
 
     if (data.reviewed) {
-      var reStamp = el("span", "stamp small", "Re-examined");
+      var reStamp = el("span", "stamp small", t("stampReviewed"));
       reStamp.style.setProperty("--worn", WORN);
       stampArea.appendChild(reStamp);
     }
     if (data.status && data.status !== "classified") {
-      var statusStamp = el("span", "stamp small", data.status);
+      var statusStamp = el("span", "stamp small", statusName(data.status));
       statusStamp.style.setProperty("--worn", WORN);
       stampArea.appendChild(statusStamp);
     }
@@ -941,14 +1256,14 @@ Subject: Invoice overdue
 
     if (data.reasoning) {
       var reason = el("div", "result-section");
-      reason.appendChild(el("span", "label", "Reason"));
+      reason.appendChild(el("span", "label", t("labelReason")));
       reason.appendChild(el("p", "reasoning", data.reasoning));
       mainCol.appendChild(reason);
     }
 
     if (data.signals && data.signals.length) {
       var signals = el("div", "result-section");
-      signals.appendChild(el("span", "label", "Signals"));
+      signals.appendChild(el("span", "label", t("labelSignals")));
       var list = el("ul", "signals");
       data.signals.forEach(function (signal) { list.appendChild(el("li", null, signal)); });
       signals.appendChild(list);
@@ -958,7 +1273,7 @@ Subject: Invoice overdue
     var metaCol = el("div", "meta");
 
     var confItem = el("div", "meta-item");
-    confItem.appendChild(el("span", "label", "Confidence"));
+    confItem.appendChild(el("span", "label", t("labelConfidence")));
     confItem.appendChild(el("p", "meta-confidence", confidence.toFixed(2)));
     var meter = el("div", "meter");
     var fill = el("div", "meter-fill");
@@ -968,9 +1283,9 @@ Subject: Invoice overdue
     confItem.appendChild(meter);
     metaCol.appendChild(confItem);
 
-    metaCol.appendChild(metaItem("Processed at", formatDate(data.created_at)));
-    metaCol.appendChild(metaItem("Email size", formatSize(lastSize)));
-    metaCol.appendChild(metaItem("Model", data.model || "—"));
+    metaCol.appendChild(metaItem(t("labelProcessedAt"), formatDate(data.created_at)));
+    metaCol.appendChild(metaItem(t("labelEmailSize"), formatSize(lastSize)));
+    metaCol.appendChild(metaItem(t("labelModel"), data.model || "—"));
 
     grid.appendChild(mainCol);
     grid.appendChild(metaCol);
@@ -981,19 +1296,15 @@ Subject: Invoice overdue
 
   /* ---------- submitting ---------- */
 
-  function detailText(payload, fallback) {
-    if (!payload || payload.detail === undefined) { return fallback; }
-    if (typeof payload.detail === "string") { return payload.detail; }
-    if (Array.isArray(payload.detail) && payload.detail.length && payload.detail[0].msg) {
-      return payload.detail[0].msg;
-    }
-    return fallback;
+  function detailKey(payload, fallbackKey) {
+    if (!payload || typeof payload.detail !== "string") { return fallbackKey; }
+    return DETAIL_KEYS[payload.detail] || fallbackKey;
   }
 
   function setBusy(value) {
     busy = value;
     submit.disabled = value;
-    submit.textContent = value ? "Classifying…" : "Classify email →";
+    submit.textContent = value ? t("submitBusy") : t("submit");
     Array.prototype.forEach.call(sampleRow.children, function (button) {
       button.disabled = value;
     });
@@ -1008,16 +1319,13 @@ Subject: Invoice overdue
 
     var form = new FormData();
     form.append("file", file);
+    form.append("language", lang);
 
     try {
       var response = await fetch("/classify/", { method: "POST", body: form });
 
       if (response.status === 429) {
-        showAlert(
-          "Rate limit reached",
-          "This demo accepts 10 classifications per minute. Give it a minute and try again.",
-          "warn"
-        );
+        showAlert("rateTitle", "rateBody", "warn");
         return;
       }
 
@@ -1030,17 +1338,13 @@ Subject: Invoice overdue
       }
 
       if (response.status === 422) {
-        showAlert("That file was rejected", detailText(payload, "The file is not a valid .eml."), "warn");
+        showAlert("rejectedTitle", detailKey(payload, "rejectedBody"), "warn");
         return;
       }
 
-      showAlert(
-        "Classification failed",
-        detailText(payload, "Something went wrong on the server. Please try again."),
-        "error"
-      );
+      showAlert("failedTitle", detailKey(payload, "failedBody"), "error");
     } catch (error) {
-      showAlert("Network error", "Could not reach the API. Check your connection and try again.", "error");
+      showAlert("networkTitle", "networkBody", "error");
     } finally {
       setBusy(false);
     }
@@ -1052,7 +1356,7 @@ Subject: Invoice overdue
     if (pasteActive) {
       var text = pastebox.value.trim();
       if (!text) {
-        showAlert("Nothing to classify", "Paste some email text first.", "warn");
+        showAlert("emptyPasteTitle", "emptyPasteBody", "warn");
         return;
       }
       classify(textToFile(buildEml(text), "pasted.eml"));
@@ -1060,7 +1364,7 @@ Subject: Invoice overdue
     }
 
     if (!selectedFile) {
-      showAlert("No file selected", "Choose an .eml file or drop one onto the sheet.", "warn");
+      showAlert("noFileTitle", "noFileBody", "warn");
       return;
     }
     classify(selectedFile);
@@ -1068,37 +1372,58 @@ Subject: Invoice overdue
 
   /* ---------- samples ---------- */
 
+  function localized(field) {
+    if (field && typeof field === "object") {
+      return field[lang] || field[DEFAULT_LANG] || "";
+    }
+    return field || "";
+  }
+
+  function renderSamples() {
+    sampleRow.innerHTML = "";
+
+    if (!samples.length) {
+      sampleRow.appendChild(el("span", "field-hint", t("samplesUnavailable")));
+      return;
+    }
+
+    samples.forEach(function (sample) {
+      var button = el("button", "sample", localized(sample.label));
+      button.type = "button";
+      button.title = localized(sample.description);
+      button.disabled = busy;
+      button.addEventListener("click", async function () {
+        if (busy) { return; }
+        setBusy(true);
+        showLoading();
+        try {
+          var file = await fetch("/static/samples/" + sample.filename);
+          var text = await file.text();
+          setBusy(false);
+          selectTab("upload");
+          setFile(textToFile(text, sample.filename));
+          classify(textToFile(text, sample.filename));
+        } catch (error) {
+          setBusy(false);
+          showAlert("sampleErrorTitle", "sampleErrorBody", "error");
+        }
+      });
+      sampleRow.appendChild(button);
+    });
+  }
+
   async function loadSamples() {
     try {
       var response = await fetch("/static/samples/samples.json");
       var data = await response.json();
-      (data.samples || []).forEach(function (sample) {
-        var button = el("button", "sample", sample.label);
-        button.type = "button";
-        button.title = sample.description;
-        button.addEventListener("click", async function () {
-          if (busy) { return; }
-          setBusy(true);
-          showLoading();
-          try {
-            var file = await fetch("/static/samples/" + sample.filename);
-            var text = await file.text();
-            setBusy(false);
-            selectTab("upload");
-            setFile(textToFile(text, sample.filename));
-            classify(textToFile(text, sample.filename));
-          } catch (error) {
-            setBusy(false);
-            showAlert("Could not load the sample", "Try picking another one.", "error");
-          }
-        });
-        sampleRow.appendChild(button);
-      });
+      samples = data.samples || [];
     } catch (error) {
-      sampleRow.appendChild(el("span", "field-hint", "Samples are unavailable right now."));
+      samples = [];
     }
+    renderSamples();
   }
 
+  applyStaticStrings();
   showPlaceholder();
   loadSamples();
 })();

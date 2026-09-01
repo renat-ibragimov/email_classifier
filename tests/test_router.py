@@ -7,7 +7,7 @@ from httpx import ASGITransport, AsyncClient
 
 from app.config import settings
 from app.helpers.dto import ClassificationResult
-from app.helpers.enums import EmailCategoryEnum
+from app.helpers.enums import EmailCategoryEnum, LanguageEnum
 from app.main import app
 
 VALID_EML = b"From: sender@example.com\r\nTo: to@example.com\r\nSubject: s\r\n\r\nbody\r\n"
@@ -33,11 +33,12 @@ def mock_classifier():
         yield mock
 
 
-async def _post(eml_bytes, filename="email.eml"):
+async def _post(eml_bytes, filename="email.eml", language=None):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         return await client.post(
             "/classify/",
             files={"file": (filename, eml_bytes, "application/octet-stream")},
+            data={} if language is None else {"language": language},
         )
 
 
@@ -95,6 +96,45 @@ class TestPostClassify:
             response = await _post(VALID_EML)
         assert response.status_code == 500
         assert response.json()["detail"] == "Classification failed"
+
+
+class TestLanguage:
+    async def test_defaults_to_en(self, db_session, mock_classifier):
+        response = await _post(VALID_EML)
+
+        assert response.status_code == 201
+        assert response.json()["language"] == "en"
+        assert mock_classifier.call_args.args[1] == LanguageEnum.EN
+
+    async def test_uk_reaches_the_classifier(self, db_session, mock_classifier):
+        response = await _post(VALID_EML, language="uk")
+
+        assert response.status_code == 201
+        assert response.json()["language"] == "uk"
+        assert mock_classifier.call_args.args[1] == LanguageEnum.UK
+
+    async def test_same_file_in_two_languages_makes_two_records(self, db_session, mock_classifier):
+        first = await _post(VALID_EML, language="en")
+        second = await _post(VALID_EML, language="uk")
+
+        assert first.status_code == 201
+        assert second.status_code == 201
+        assert first.json()["id"] != second.json()["id"]
+        assert mock_classifier.call_count == 2
+
+    async def test_same_file_same_language_is_still_deduplicated(self, db_session, mock_classifier):
+        first = await _post(VALID_EML, language="uk")
+        second = await _post(VALID_EML, language="uk")
+
+        assert first.status_code == 201
+        assert second.status_code == 200
+        assert second.json()["id"] == first.json()["id"]
+        assert mock_classifier.call_count == 1
+
+    async def test_unknown_language_returns_422(self, db_session):
+        response = await _post(VALID_EML, language="de")
+
+        assert response.status_code == 422
 
 
 class TestGetClassify:

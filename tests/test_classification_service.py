@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from app.helpers.dto import ClassificationResult
-from app.helpers.enums import ClassificationStatusEnum, EmailCategoryEnum
+from app.helpers.enums import ClassificationStatusEnum, EmailCategoryEnum, LanguageEnum
 from app.models.classification import ClassificationRecord
 from app.services.classification_service import ClassificationService
 
@@ -147,3 +147,52 @@ class TestClassify:
         assert new_record.status == ClassificationStatusEnum.FAILED
         # save was called: once after create (PENDING), once when marking FAILED.
         assert repo.save.call_count == 2
+
+
+class TestLanguage:
+    async def test_defaults_to_en(self):
+        new_record = _build_record(status=ClassificationStatusEnum.PENDING)
+        repo = AsyncMock()
+        repo.find_by_hash = AsyncMock(return_value=None)
+        repo.create = AsyncMock(return_value=(new_record, True))
+        with patch(
+            "app.services.classification_service.classify_email",
+            new=AsyncMock(return_value=_classification_result()),
+        ) as mock_classify:
+            service = ClassificationService(repo)
+            record, _ = await service.classify(VALID_EML)
+
+        assert mock_classify.call_args.args[1] == LanguageEnum.EN
+        assert repo.create.call_args.args[1] == LanguageEnum.EN
+        assert record.language == "en"
+
+    async def test_uk_is_threaded_and_stored(self):
+        new_record = _build_record(status=ClassificationStatusEnum.PENDING)
+        repo = AsyncMock()
+        repo.find_by_hash = AsyncMock(return_value=None)
+        repo.create = AsyncMock(return_value=(new_record, True))
+        with patch(
+            "app.services.classification_service.classify_email",
+            new=AsyncMock(return_value=_classification_result()),
+        ) as mock_classify:
+            service = ClassificationService(repo)
+            record, _ = await service.classify(VALID_EML, LanguageEnum.UK)
+
+        assert mock_classify.call_args.args[1] == LanguageEnum.UK
+        assert repo.create.call_args.args[1] == LanguageEnum.UK
+        assert record.language == "uk"
+
+    async def test_language_changes_the_lookup_hash(self):
+        repo = AsyncMock()
+        repo.find_by_hash = AsyncMock(return_value=None)
+        repo.create = AsyncMock(return_value=(_build_record(), True))
+        with patch(
+            "app.services.classification_service.classify_email",
+            new=AsyncMock(return_value=_classification_result()),
+        ):
+            service = ClassificationService(repo)
+            await service.classify(VALID_EML, LanguageEnum.EN)
+            await service.classify(VALID_EML, LanguageEnum.UK)
+
+        hashes = [call.args[0] for call in repo.find_by_hash.call_args_list]
+        assert hashes[0] != hashes[1]

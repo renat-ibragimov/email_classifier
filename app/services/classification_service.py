@@ -1,5 +1,5 @@
 from app.helpers.dto import ParsedEmail
-from app.helpers.enums import ClassificationStatusEnum
+from app.helpers.enums import ClassificationStatusEnum, LanguageEnum
 from app.models.classification import ClassificationRecord
 from app.repositories.classification import ClassificationRepository
 from app.services.classifier import classify_email
@@ -13,15 +13,23 @@ class ClassificationService:
     def __init__(self, repo: ClassificationRepository) -> None:
         self.repo = repo
 
-    async def classify(self, content: bytes) -> tuple[ClassificationRecord, bool]:
+    async def classify(
+        self,
+        content: bytes,
+        language: LanguageEnum = LanguageEnum.EN,
+    ) -> tuple[ClassificationRecord, bool]:
         """Classify email content. Returns existing record if duplicate.
 
         Parsing happens before any DB interaction so an invalid .eml never
         leaves a PENDING orphan behind. The PENDING row is committed before
         the LLM call so the unique-index lock isn't held while OpenAI runs.
 
+        The language is part of the content hash, so the same file asked for in
+        another language is a separate record rather than a cache hit.
+
         Args:
             content: Raw .eml file bytes.
+            language: Language for the reasoning and signals.
 
         Returns:
             Tuple of (record, is_new). is_new=False means duplicate.
@@ -30,7 +38,7 @@ class ClassificationService:
             ValueError: If content is not a valid .eml (no DB write happened).
 
         """
-        content_hash = compute_hash(content)
+        content_hash = compute_hash(content, language)
         parsed = parse_email(content)
 
         existing = await self.repo.find_by_hash(content_hash)
@@ -38,31 +46,37 @@ class ClassificationService:
             if existing.status == ClassificationStatusEnum.CLASSIFIED:
                 return existing, False
             # Re-classify pending or failed records (no commit needed; SELECT-only tx).
-            return await self._run_llm_classification(existing, parsed), False
+            return await self._run_llm_classification(existing, parsed, language), False
 
         # Insert + commit PENDING immediately to release the unique-index lock
         # before the multi-second LLM call. Repo handles the concurrent-insert race.
-        record, is_new = await self.repo.create(content_hash)
+        record, is_new = await self.repo.create(content_hash, language)
         await self.repo.save()
 
         if not is_new and record.status == ClassificationStatusEnum.CLASSIFIED:
             return record, False
 
-        return await self._run_llm_classification(record, parsed), is_new
+        return await self._run_llm_classification(record, parsed, language), is_new
 
-    async def _run_llm_classification(self, record: ClassificationRecord, parsed: ParsedEmail) -> ClassificationRecord:
+    async def _run_llm_classification(
+        self,
+        record: ClassificationRecord,
+        parsed: ParsedEmail,
+        language: LanguageEnum,
+    ) -> ClassificationRecord:
         """Call the LLM classifier and persist the result.
 
         Args:
             record: Existing DB record to update.
             parsed: Already-parsed email content.
+            language: Language for the reasoning and signals.
 
         Returns:
             Updated ClassificationRecord.
 
         """
         try:
-            result = await classify_email(parsed)
+            result = await classify_email(parsed, language)
         except Exception:
             record.status = ClassificationStatusEnum.FAILED
             await self.repo.save()
@@ -74,6 +88,7 @@ class ClassificationService:
         record.reasoning = result.reasoning
         record.signals = result.signals
         record.reviewed = result.reviewed
+        record.language = language.value
 
         await self.repo.save()
         return record

@@ -1,7 +1,7 @@
 import pytest
 
 from app.helpers.dto import ClassificationResult, ParsedEmail
-from app.helpers.enums import ClassificationStatusEnum, EmailCategoryEnum
+from app.helpers.enums import ClassificationStatusEnum, EmailCategoryEnum, LanguageEnum
 
 
 class TestPgValues:
@@ -17,6 +17,9 @@ class TestPgValues:
             "personal",
             "automated",
         ]
+
+    def test_language_values(self):
+        assert LanguageEnum.pg_values() == ["en", "uk"]
 
     def test_str_enum_member_is_string(self):
         assert ClassificationStatusEnum.PENDING == "pending"
