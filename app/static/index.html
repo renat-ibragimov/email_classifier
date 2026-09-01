@@ -1414,7 +1414,9 @@ Subject: Invoice overdue
 
   async function loadSamples() {
     try {
-      var response = await fetch("/static/samples/samples.json");
+      /* no-store: the manifest changes with the samples, and a stale copy
+         would render the wrong labels for the current language. */
+      var response = await fetch("/static/samples/samples.json", { cache: "no-store" });
       var data = await response.json();
       samples = data.samples || [];
     } catch (error) {
