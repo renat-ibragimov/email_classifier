@@ -19,7 +19,6 @@ async def _get(path):
 
 
 class TestIndexPage:
-
     async def test_serves_html(self):
         response = await _get("/")
 
@@ -33,7 +32,6 @@ class TestIndexPage:
 
 
 class TestSamples:
-
     async def test_manifest_lists_every_sample(self):
         response = await _get("/static/samples/samples.json")
 

@@ -29,7 +29,6 @@ def _mock_response(category, confidence, reasoning="r", signals=None):
 
 
 class TestClassifyEmail:
-
     async def test_high_confidence_no_review(self):
         with patch("app.services.classifier.get_client") as mock_get_client:
             mock_instance = mock_get_client.return_value
@@ -49,10 +48,12 @@ class TestClassifyEmail:
     async def test_low_confidence_triggers_review(self):
         with patch("app.services.classifier.get_client") as mock_get_client:
             mock_instance = mock_get_client.return_value
-            mock_instance.chat.completions.create = AsyncMock(side_effect=[
-                _mock_response("newsletter", 0.5),
-                _mock_response("phishing", 0.92, "after review", ["red flag"]),
-            ])
+            mock_instance.chat.completions.create = AsyncMock(
+                side_effect=[
+                    _mock_response("newsletter", 0.5),
+                    _mock_response("phishing", 0.92, "after review", ["red flag"]),
+                ]
+            )
 
             result = await classify_email(PARSED)
 
@@ -67,10 +68,12 @@ class TestClassifyEmail:
         # Default threshold is 0.85; <= triggers review.
         with patch("app.services.classifier.get_client") as mock_get_client:
             mock_instance = mock_get_client.return_value
-            mock_instance.chat.completions.create = AsyncMock(side_effect=[
-                _mock_response("transactional", 0.85),
-                _mock_response("personal", 0.99),
-            ])
+            mock_instance.chat.completions.create = AsyncMock(
+                side_effect=[
+                    _mock_response("transactional", 0.85),
+                    _mock_response("personal", 0.99),
+                ]
+            )
 
             result = await classify_email(PARSED)
 
@@ -88,7 +91,6 @@ class TestClassifyEmail:
 
 
 class TestGetClient:
-
     def test_client_is_created_once_and_reused(self):
         get_client.cache_clear()
         try:

@@ -11,13 +11,7 @@ from app.rate_limit import CLASSIFY_RATE_LIMIT, get_client_ip
 # "10/minute" -> 10; keeps the test honest if the configured limit changes.
 LIMIT = int(CLASSIFY_RATE_LIMIT.split("/")[0])
 
-VALID_EML = (
-    b"From: sender@example.com\r\n"
-    b"To: to@example.com\r\n"
-    b"Subject: s\r\n"
-    b"\r\n"
-    b"body\r\n"
-)
+VALID_EML = b"From: sender@example.com\r\nTo: to@example.com\r\nSubject: s\r\n\r\nbody\r\n"
 
 
 def _request(headers=None, client_host="10.0.0.1"):
@@ -55,7 +49,6 @@ async def _post(client_ip):
 
 
 class TestGetClientIp:
-
     def test_prefers_first_forwarded_for_entry(self):
         request = _request({"x-forwarded-for": "203.0.113.5, 70.41.3.18, 150.172.238.178"})
         assert get_client_ip(request) == "203.0.113.5"

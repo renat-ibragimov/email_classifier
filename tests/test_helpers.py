@@ -5,7 +5,6 @@ from app.helpers.enums import ClassificationStatusEnum, EmailCategoryEnum
 
 
 class TestPgValues:
-
     def test_classification_status_values(self):
         assert ClassificationStatusEnum.pg_values() == ["pending", "classified", "failed"]
 
@@ -25,7 +24,6 @@ class TestPgValues:
 
 
 class TestParsedEmail:
-
     def test_frozen(self):
         parsed = ParsedEmail(sender="a@b.com", to="c@d.com", subject="s", date="d", body="b")
         with pytest.raises(AttributeError):
@@ -33,7 +31,6 @@ class TestParsedEmail:
 
 
 class TestClassificationResult:
-
     def test_frozen(self):
         result = ClassificationResult(
             category=EmailCategoryEnum.SPAM,

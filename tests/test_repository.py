@@ -9,7 +9,6 @@ from app.repositories.classification import ClassificationRepository
 
 
 class TestFindById:
-
     async def test_returns_record_when_exists(self, db_session):
         record = ClassificationRecord(content_hash="abc123")
         db_session.add(record)
@@ -30,7 +29,6 @@ class TestFindById:
 
 
 class TestFindByHash:
-
     async def test_returns_record_when_exists(self, db_session):
         record = ClassificationRecord(content_hash="hashvalue")
         db_session.add(record)
@@ -49,7 +47,6 @@ class TestFindByHash:
 
 
 class TestCreate:
-
     async def test_inserts_new_record(self, db_session):
         repo = ClassificationRepository(db_session)
 
@@ -87,7 +84,6 @@ class TestCreate:
 
 
 class TestSave:
-
     async def test_commits_pending_changes(self, db_session):
         record = ClassificationRecord(content_hash="committest")
         db_session.add(record)

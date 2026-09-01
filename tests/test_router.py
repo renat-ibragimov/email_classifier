@@ -8,13 +8,7 @@ from app.helpers.dto import ClassificationResult
 from app.helpers.enums import EmailCategoryEnum
 from app.main import app
 
-VALID_EML = (
-    b"From: sender@example.com\r\n"
-    b"To: to@example.com\r\n"
-    b"Subject: s\r\n"
-    b"\r\n"
-    b"body\r\n"
-)
+VALID_EML = b"From: sender@example.com\r\nTo: to@example.com\r\nSubject: s\r\n\r\nbody\r\n"
 
 
 def _result(category=EmailCategoryEnum.SPAM, reviewed=False):
@@ -51,7 +45,6 @@ async def _get(record_id):
 
 
 class TestPostClassify:
-
     async def test_new_returns_201(self, db_session):
         response = await _post(VALID_EML)
         assert response.status_code == 201
@@ -99,7 +92,6 @@ class TestPostClassify:
 
 
 class TestGetClassify:
-
     async def test_returns_existing(self, db_session):
         r1 = await _post(VALID_EML)
         record_id = r1.json()["id"]
@@ -122,7 +114,6 @@ class TestGetClassify:
 
 
 class TestHealth:
-
     async def test_returns_ok(self):
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.get("/health")

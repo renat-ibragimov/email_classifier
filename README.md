@@ -1,5 +1,7 @@
 # Email Classifier
 
+[![CI](https://github.com/renat-ibragimov/email_classifier/actions/workflows/ci.yml/badge.svg)](https://github.com/renat-ibragimov/email_classifier/actions/workflows/ci.yml)
+
 A REST API service that ingests `.eml` files, classifies them with an LLM, and persists the result in PostgreSQL.
 
 Each email is assigned one of six categories (**spam**, **phishing**, **newsletter**, **transactional**, **personal**, or **automated**) together with a confidence score, plain-language reasoning, and a list of supporting signals.
@@ -126,6 +128,8 @@ emails.renat-ibragimov.com {
 ```
 
 Caddy provisions the certificate automatically. Both services use `restart: unless-stopped`, so they come back after a reboot; migrations run on app startup as in dev.
+
+Pushes to `main` auto-deploy via GitHub Actions once CI passes: the workflow SSHes into the server, pulls `origin/main`, and rebuilds the stack. A manual deploy is still just `git pull && docker compose -f docker-compose.prod.yml up -d --build` on the server.
 
 ## Architecture
 

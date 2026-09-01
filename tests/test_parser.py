@@ -13,18 +13,9 @@ VALID_EML = (
     b"Hello, this is a test email body.\r\n"
 )
 
-NO_FROM_EML = (
-    b"To: recipient@example.com\r\n"
-    b"Subject: No sender\r\n"
-    b"\r\n"
-    b"Body text.\r\n"
-)
+NO_FROM_EML = b"To: recipient@example.com\r\nSubject: No sender\r\n\r\nBody text.\r\n"
 
-MINIMAL_EML = (
-    b"From: sender@example.com\r\n"
-    b"\r\n"
-    b"Just a body.\r\n"
-)
+MINIMAL_EML = b"From: sender@example.com\r\n\r\nJust a body.\r\n"
 
 HTML_EML = (
     b"From: sender@example.com\r\n"
@@ -64,7 +55,6 @@ NON_TEXT_EML = (
 
 
 class TestParseEmail:
-
     def test_parses_all_fields(self):
         result = parse_email(VALID_EML)
         assert result.sender == "sender@example.com"

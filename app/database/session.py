@@ -11,4 +11,6 @@ async_session = async_sessionmaker(engine, expire_on_commit=False)
 async def get_session() -> AsyncIterator[AsyncSession]:
     """Yield an async DB session for a single request and close it on exit."""
     async with async_session() as session:
-        yield session
+        # ASYNC119: FastAPI drives this generator to completion, so the context manager
+        # always exits; this is the documented yield-dependency pattern.
+        yield session  # noqa: ASYNC119

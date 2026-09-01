@@ -23,9 +23,7 @@ class ClassificationRepository:
             ClassificationRecord or None if not found.
 
         """
-        result = await self.session.execute(
-            select(ClassificationRecord).where(ClassificationRecord.id == record_id)
-        )
+        result = await self.session.execute(select(ClassificationRecord).where(ClassificationRecord.id == record_id))
         return result.scalar_one_or_none()
 
     async def find_by_hash(self, content_hash: str) -> ClassificationRecord | None:
@@ -74,9 +72,7 @@ class ClassificationRepository:
             await self.session.rollback()
             existing = await self.find_by_hash(content_hash)
             if existing is None:
-                raise RuntimeError(
-                    "Concurrent record disappeared after IntegrityError — unexpected state"
-                ) from None
+                raise RuntimeError("Concurrent record disappeared after IntegrityError — unexpected state") from None
             return existing, False
 
         return record, True

@@ -50,9 +50,7 @@ class ClassificationService:
 
         return await self._run_llm_classification(record, parsed), is_new
 
-    async def _run_llm_classification(
-        self, record: ClassificationRecord, parsed: ParsedEmail
-    ) -> ClassificationRecord:
+    async def _run_llm_classification(self, record: ClassificationRecord, parsed: ParsedEmail) -> ClassificationRecord:
         """Call the LLM classifier and persist the result.
 
         Args:
@@ -65,16 +63,17 @@ class ClassificationService:
         """
         try:
             result = await classify_email(parsed)
-            record.status = ClassificationStatusEnum.CLASSIFIED
-            record.category = result.category
-            record.confidence = result.confidence
-            record.reasoning = result.reasoning
-            record.signals = result.signals
-            record.reviewed = result.reviewed
         except Exception:
             record.status = ClassificationStatusEnum.FAILED
             await self.repo.save()
             raise
+
+        record.status = ClassificationStatusEnum.CLASSIFIED
+        record.category = result.category
+        record.confidence = result.confidence
+        record.reasoning = result.reasoning
+        record.signals = result.signals
+        record.reviewed = result.reviewed
 
         await self.repo.save()
         return record

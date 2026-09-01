@@ -90,13 +90,7 @@ def _build_user_message(email: ParsedEmail) -> str:
         Formatted string with email headers and body.
 
     """
-    return (
-        f"From: {email.sender}\n"
-        f"To: {email.to}\n"
-        f"Subject: {email.subject}\n"
-        f"Date: {email.date}\n\n"
-        f"{email.body}"
-    )
+    return f"From: {email.sender}\nTo: {email.to}\nSubject: {email.subject}\nDate: {email.date}\n\n{email.body}"
 
 
 async def _call_openai(user_message: str, system_prompt: str) -> dict:

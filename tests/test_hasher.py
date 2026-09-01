@@ -4,7 +4,6 @@ from app.services.hasher import compute_hash
 
 
 class TestComputeHash:
-
     def test_returns_sha256_hex_digest(self):
         content = b"test content"
         expected = hashlib.sha256(content).hexdigest()

@@ -7,13 +7,7 @@ from app.helpers.enums import ClassificationStatusEnum, EmailCategoryEnum
 from app.models.classification import ClassificationRecord
 from app.services.classification_service import ClassificationService
 
-VALID_EML = (
-    b"From: sender@example.com\r\n"
-    b"To: to@example.com\r\n"
-    b"Subject: s\r\n"
-    b"\r\n"
-    b"body\r\n"
-)
+VALID_EML = b"From: sender@example.com\r\nTo: to@example.com\r\nSubject: s\r\n\r\nbody\r\n"
 
 INVALID_EML = b"no headers"
 
@@ -33,7 +27,6 @@ def _classification_result(category=EmailCategoryEnum.SPAM, reviewed=False):
 
 
 class TestClassify:
-
     async def test_existing_classified_returns_duplicate(self):
         existing = _build_record(status=ClassificationStatusEnum.CLASSIFIED)
         repo = AsyncMock()
