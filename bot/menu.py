@@ -5,7 +5,7 @@ from aiogram.types import BotCommand, BotCommandScopeAllPrivateChats, BotCommand
 
 from app.helpers.enums import LanguageEnum
 from bot.i18n import t
-from bot.language import DEFAULT_LANGUAGE
+from bot.language import DEFAULT_LANGUAGE, UKRAINIAN_CLIENT_CODES
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +32,9 @@ def commands_for(language: LanguageEnum) -> list[BotCommand]:
 async def set_default_menu(bot: Bot) -> None:
     """Publish the menu every private chat starts with.
 
-    Telegram picks a menu by the client's interface language, so each supported
-    language is registered separately and the untranslated default covers the rest.
+    Telegram picks a menu by the client's interface language, using the same
+    mapping the replies do: Ukrainian for Ukrainian and Russian clients, and the
+    untranslated default — English — for everyone else.
 
     Args:
         bot: Bot whose menu is being set.
@@ -41,8 +42,8 @@ async def set_default_menu(bot: Bot) -> None:
     """
     scope = BotCommandScopeAllPrivateChats()
 
-    for language in LanguageEnum:
-        await bot.set_my_commands(commands_for(language), scope=scope, language_code=language.value)
+    for code in sorted(UKRAINIAN_CLIENT_CODES):
+        await bot.set_my_commands(commands_for(LanguageEnum.UK), scope=scope, language_code=code)
 
     await bot.set_my_commands(commands_for(DEFAULT_LANGUAGE), scope=scope)
 

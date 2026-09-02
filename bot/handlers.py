@@ -15,7 +15,7 @@ from bot.api import (
 from bot.eml import build_eml_from_message
 from bot.formatting import format_card
 from bot.i18n import t
-from bot.language import get_language, toggle_language
+from bot.language import DEFAULT_LANGUAGE, resolve_language, toggle_language
 from bot.menu import set_chat_menu
 
 logger = logging.getLogger(__name__)
@@ -38,10 +38,14 @@ def _language_of(message: Message) -> LanguageEnum:
         message: Incoming Telegram message.
 
     Returns:
-        The sender's chosen language, or the default for unknown senders.
+        The sender's chosen language, the one read from their Telegram client, or
+        the default for a message that carries no sender.
 
     """
-    return get_language(message.from_user.id) if message.from_user else LanguageEnum.UK
+    if not message.from_user:
+        return DEFAULT_LANGUAGE
+
+    return resolve_language(message.from_user.id, message.from_user.language_code)
 
 
 def _is_eml(document: Document) -> bool:
@@ -91,7 +95,7 @@ async def handle_lang(message: Message) -> None:
     """Toggle the sender between Ukrainian and English, menu included."""
     if not message.from_user:
         return
-    language = toggle_language(message.from_user.id)
+    language = toggle_language(message.from_user.id, _language_of(message))
     await set_chat_menu(message.bot, message.chat.id, language)
     await message.answer(t(language, "language_set"))
 

@@ -150,11 +150,13 @@ The reply is a single card: verdict (🔴 FLAGGED / 🟢 CLEAR, the only place e
 | Command | What it does |
 | --- | --- |
 | `/start`, `/help` | What to send, plus the privacy note |
-| `/lang` | Toggle between Ukrainian (default) and English |
+| `/lang` | Toggle between English and Ukrainian |
 
-Both commands are also published as Telegram's menu button, set from code on startup (`setMyCommands`) rather than by hand in BotFather. The menu exists in both languages: Telegram picks one by the client's interface language, and `/lang` re-publishes a chat-scoped menu so it follows the user's own choice instead. A menu update that fails is logged and does not break the reply.
+Both commands are also published as Telegram's menu button, set from code on startup (`setMyCommands`) rather than by hand in BotFather. A menu update that fails is logged and does not break the reply.
 
-The language preference is per user and kept in memory — the bot owns no database, and a restart just returns everyone to the Ukrainian default.
+**The language is picked before the user says anything.** Every update carries the sender's Telegram interface language as `from_user.language_code`, so the very first reply already lands in the right one: `uk` and `ru` clients are answered in Ukrainian, everyone else — and anyone whose client sent no tag, since the field is optional — in English. Only the language subtag is read, because clients send anything from `uk` to `en-US` to `pt-br`. The same mapping is registered with `setMyCommands`, so the menu descriptions match the replies.
+
+`/lang` overrides the detection and is what the bot answers in from then on; it also re-publishes a chat-scoped menu, which outranks the language-based default. Choices are per user and kept in memory — the bot owns no database, and a restart just returns everyone to the language their client implies. Detection itself stores nothing, so changing the interface language in Telegram is picked up on the next message.
 
 ### Running it locally
 
@@ -232,7 +234,7 @@ bot/
 ├── eml.py           Telegram message -> RFC-822 .eml bytes
 ├── formatting.py    Result card (HTML), truncated to Telegram's limit
 ├── i18n.py          en/uk strings, category names, the FLAGGED reading
-├── language.py      Per-user language, in memory
+├── language.py      Client-language detection + per-user choice, in memory
 ├── menu.py          Telegram command menu, per language and per chat
 └── config.py        pydantic-settings
 ```

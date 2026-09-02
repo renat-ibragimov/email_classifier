@@ -4,7 +4,7 @@ from aiogram.types import BotCommandScopeAllPrivateChats, BotCommandScopeChat
 
 from app.helpers.enums import LanguageEnum
 from bot.i18n import TEXTS, t
-from bot.language import DEFAULT_LANGUAGE
+from bot.language import DEFAULT_LANGUAGE, UKRAINIAN_CLIENT_CODES
 from bot.menu import MENU_COMMANDS, commands_for, set_chat_menu, set_default_menu
 
 CHAT_ID = 777
@@ -30,13 +30,30 @@ class TestCommandList:
 
 
 class TestDefaultMenu:
-    async def test_publishes_one_menu_per_language_plus_a_fallback(self):
+    async def test_ukrainian_clients_get_the_ukrainian_menu(self):
         bot = _bot()
 
         await set_default_menu(bot)
 
-        language_codes = [call.kwargs.get("language_code") for call in bot.set_my_commands.await_args_list]
-        assert language_codes == [language.value for language in LanguageEnum] + [None]
+        published = {
+            call.kwargs["language_code"]: call.args[0]
+            for call in bot.set_my_commands.await_args_list
+            if call.kwargs.get("language_code")
+        }
+        assert set(published) == set(UKRAINIAN_CLIENT_CODES)
+        assert all(commands == commands_for(LanguageEnum.UK) for commands in published.values())
+
+    async def test_everyone_else_gets_the_untranslated_default(self):
+        bot = _bot()
+
+        await set_default_menu(bot)
+
+        last = bot.set_my_commands.await_args
+        assert last.kwargs.get("language_code") is None
+        assert last.args[0] == commands_for(DEFAULT_LANGUAGE)
+
+    async def test_the_default_menu_is_english(self):
+        assert DEFAULT_LANGUAGE is LanguageEnum.EN
 
     async def test_targets_private_chats(self):
         bot = _bot()
@@ -45,14 +62,6 @@ class TestDefaultMenu:
 
         for call in bot.set_my_commands.await_args_list:
             assert isinstance(call.kwargs["scope"], BotCommandScopeAllPrivateChats)
-
-    async def test_the_untranslated_fallback_uses_the_default_language(self):
-        bot = _bot()
-
-        await set_default_menu(bot)
-
-        commands = bot.set_my_commands.await_args.args[0]
-        assert commands == commands_for(DEFAULT_LANGUAGE)
 
 
 class TestChatMenu:
