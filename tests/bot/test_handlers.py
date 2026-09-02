@@ -39,7 +39,11 @@ class FakeMessage:
         self.date = None
         self.forward_origin = None
         self.answer = AsyncMock()
-        self.bot = SimpleNamespace(send_chat_action=AsyncMock(), download=AsyncMock())
+        self.bot = SimpleNamespace(
+            send_chat_action=AsyncMock(),
+            download=AsyncMock(),
+            set_my_commands=AsyncMock(),
+        )
 
     @property
     def replies(self):
@@ -76,6 +80,17 @@ class TestCommands:
         assert message.replies == [t(LanguageEnum.EN, "language_set")]
         assert language_store.get_language(USER_ID) is LanguageEnum.EN
 
+    async def test_lang_republishes_the_menu_in_the_new_language(self):
+        message = FakeMessage()
+
+        await handle_lang(message)
+
+        commands = message.bot.set_my_commands.await_args.args[0]
+        assert [command.description for command in commands] == [
+            t(LanguageEnum.EN, "cmd_help"),
+            t(LanguageEnum.EN, "cmd_lang"),
+        ]
+
     async def test_lang_toggles_back(self):
         message = FakeMessage()
 
@@ -98,6 +113,15 @@ class TestCommands:
         await handle_lang(message)
 
         assert message.replies == []
+        message.bot.set_my_commands.assert_not_awaited()
+
+    async def test_lang_still_answers_when_the_menu_cannot_be_updated(self):
+        message = FakeMessage()
+        message.bot.set_my_commands = AsyncMock(side_effect=RuntimeError("telegram is down"))
+
+        await handle_lang(message)
+
+        assert message.replies == [t(LanguageEnum.EN, "language_set")]
 
 
 class TestText:

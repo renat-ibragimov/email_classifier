@@ -152,6 +152,8 @@ The reply is a single card: verdict (🔴 FLAGGED / 🟢 CLEAR, the only place e
 | `/start`, `/help` | What to send, plus the privacy note |
 | `/lang` | Toggle between Ukrainian (default) and English |
 
+Both commands are also published as Telegram's menu button, set from code on startup (`setMyCommands`) rather than by hand in BotFather. The menu exists in both languages: Telegram picks one by the client's interface language, and `/lang` re-publishes a chat-scoped menu so it follows the user's own choice instead. A menu update that fails is logged and does not break the reply.
+
 The language preference is per user and kept in memory — the bot owns no database, and a restart just returns everyone to the Ukrainian default.
 
 ### Running it locally
@@ -231,6 +233,7 @@ bot/
 ├── formatting.py    Result card (HTML), truncated to Telegram's limit
 ├── i18n.py          en/uk strings, category names, the FLAGGED reading
 ├── language.py      Per-user language, in memory
+├── menu.py          Telegram command menu, per language and per chat
 └── config.py        pydantic-settings
 ```
 

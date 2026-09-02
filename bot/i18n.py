@@ -19,6 +19,8 @@ TEXTS: dict[LanguageEnum, dict[str, str]] = {
             "<i>Emails are sent to a language model for analysis and are not stored as text.</i>"
         ),
         "language_set": "Language: English.",
+        "cmd_help": "What I do and what you can send",
+        "cmd_lang": "Switch Ukrainian / English",
         "hint": "Send me an email: forward one, paste its text, or attach an .eml file.",
         "file_too_large": "That file is too large. The limit is 1 MB.",
         "empty_text": "That message has no text to classify.",
@@ -48,6 +50,8 @@ TEXTS: dict[LanguageEnum, dict[str, str]] = {
             "<i>Листи надсилаються мовній моделі для аналізу і не зберігаються як текст.</i>"
         ),
         "language_set": "Мова: українська.",
+        "cmd_help": "Що я вмію і що можна надсилати",
+        "cmd_lang": "Перемкнути українську / англійську",
         "hint": "Надішліть мені лист: перешліть повідомлення, вставте текст або прикріпіть файл .eml.",
         "file_too_large": "Цей файл завеликий. Ліміт — 1 МБ.",
         "empty_text": "У цьому повідомленні немає тексту для аналізу.",

@@ -16,6 +16,7 @@ from bot.eml import build_eml_from_message
 from bot.formatting import format_card
 from bot.i18n import t
 from bot.language import get_language, toggle_language
+from bot.menu import set_chat_menu
 
 logger = logging.getLogger(__name__)
 
@@ -87,10 +88,11 @@ async def handle_help(message: Message) -> None:
 
 @router.message(Command("lang"))
 async def handle_lang(message: Message) -> None:
-    """Toggle the sender between Ukrainian and English."""
+    """Toggle the sender between Ukrainian and English, menu included."""
     if not message.from_user:
         return
     language = toggle_language(message.from_user.id)
+    await set_chat_menu(message.bot, message.chat.id, language)
     await message.answer(t(language, "language_set"))
 
 

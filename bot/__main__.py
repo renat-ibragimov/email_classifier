@@ -8,6 +8,7 @@ from aiogram.enums import ParseMode
 from bot.api import ClassifierClient
 from bot.config import get_settings
 from bot.handlers import router
+from bot.menu import set_default_menu
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,8 @@ async def main() -> None:
     # Handlers declare `client` as a parameter; the dispatcher injects it by name.
     dispatcher = Dispatcher(client=client)
     dispatcher.include_router(router)
+
+    await set_default_menu(bot)
 
     logger.info("Bot starting, API at %s", settings.api_base_url)
 
